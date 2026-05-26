@@ -8,24 +8,26 @@ See `/home/kiran/.claude/plans/can-we-please-build-sunny-rabin.md` for the full 
 
 ## Prerequisites
 
-1. **AnkiDroid installed on the phone**, signed in to AnkiWeb, with at least one deck that has due cards. Confirm AnkiDroid ↔ AnkiWeb ↔ Anki Desktop sync already works before building.
-2. **Android Studio** (Hedgehog or later) installed on a machine with the Android SDK. WSL note: install Android Studio on the Windows side; you can either connect the phone over USB to Windows, or set up `adb` over Wi-Fi.
-3. **JDK 17** (bundled with current Android Studio).
+- **AnkiDroid installed on the phone**, signed in to AnkiWeb, with at least one deck that has due cards. Confirm AnkiDroid ↔ AnkiWeb ↔ Anki Desktop sync already works before installing this app.
 
-## One-time setup
+## Install on phone (no Android Studio required)
 
-The repo intentionally does **not** include the `gradle-wrapper.jar` binary. To generate it:
+Every push to `main` triggers a GitHub Actions build that publishes a fresh debug APK to the **`latest-debug`** rolling release.
 
-- **Easiest**: open the project in Android Studio (File → Open → select this folder). On first sync it will offer to generate the wrapper. Accept.
-- **CLI alternative** (if you have a system Gradle installed): from the repo root, run `gradle wrapper --gradle-version 8.10.2`.
+1. On your phone's browser, open <https://github.com/kirangathani/anki-voice/releases/tag/latest-debug>. Bookmark this — the URL is stable across builds.
+2. Tap `app-debug.apk` to download.
+3. Tap the downloaded file. If Android blocks it, allow your browser to install unknown apps (one-time Settings prompt).
+4. Open the app. It will prompt for AnkiDroid's `READ_WRITE_DATABASE` permission — allow.
 
-After that, `./gradlew assembleDebug` should produce an APK at `app/build/outputs/apk/debug/app-debug.apk`.
+To force a fresh build without changing code: <https://github.com/kirangathani/anki-voice/actions/workflows/build-apk.yml> → Run workflow.
 
-## Running the spike
+## Develop locally (optional)
 
-1. Plug your Android phone in via USB. Enable USB debugging in developer options.
-2. In Android Studio: select your device in the device dropdown → Run.
-3. On the phone, AnkiDroid will prompt for the `READ_WRITE_DATABASE` permission the first time the app accesses it. Allow.
+Only needed if you want to iterate without pushing to GitHub each time.
+
+1. Install Android Studio (Hedgehog+). On WSL2: install on the Windows side and connect the phone over USB to Windows, or use `adb` over Wi-Fi.
+2. Open the project (File → Open → this folder). First sync generates the gradle wrapper.
+3. Plug in your phone with USB debugging enabled → Run.
 
 ## What the spike proves
 
