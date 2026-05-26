@@ -33,6 +33,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Persists the auto-generated ~/.android/debug.keystore across runs so
+      # every APK is signed with the same cert. Without this, every CI build
+      # would have a different signature and Android would refuse in-place
+      # updates ("App not installed as package conflicts with an existing
+      # package"). Cache is keyed by a fixed string; if GH evicts it, the
+      # next install requires uninstalling first — then we're stable again.
+      - name: Cache debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace --no-daemon
 

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import dev.kiran.ankivoice.BuildConfig
 import dev.kiran.ankivoice.anki.AnkiContract
 import dev.kiran.ankivoice.anki.AnkiRepository
 import dev.kiran.ankivoice.anki.Deck
@@ -124,7 +125,7 @@ private fun SpikeScreen() {
     }
 
     LaunchedEffect(Unit) {
-        append("Spike starting.")
+        append("Spike starting. build=${BuildConfig.GIT_SHA} at ${BuildConfig.BUILD_TIME}")
         val available = repo.isAnkiDroidAvailable()
         append("AnkiDroid ContentProvider reachable: $available")
         if (!available) {
@@ -146,6 +147,11 @@ private fun SpikeScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("anki-voice spike", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "build ${BuildConfig.GIT_SHA}  ·  ${BuildConfig.BUILD_TIME}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF666666),
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(

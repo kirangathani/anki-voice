@@ -1,8 +1,23 @@
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+fun gitShortSha(): String = try {
+    val proc = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+        .directory(rootDir)
+        .redirectErrorStream(true)
+        .start()
+    proc.inputStream.bufferedReader().readText().trim().ifEmpty { "unknown" }
+} catch (_: Exception) { "unknown" }
+
+val buildTimestamp: String = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    .withZone(ZoneOffset.UTC).format(Instant.now())
 
 android {
     namespace = "dev.kiran.ankivoice"
@@ -14,6 +29,9 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-spike"
+
+        buildConfigField("String", "GIT_SHA", "\"${gitShortSha()}\"")
+        buildConfigField("String", "BUILD_TIME", "\"$buildTimestamp\"")
     }
 
     buildTypes {
@@ -35,6 +53,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
