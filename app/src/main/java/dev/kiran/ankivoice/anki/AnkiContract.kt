@@ -27,7 +27,7 @@ object AnkiContract {
     object ReviewInfo {
         val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/schedule")
         const val NOTE_ID = "note_id"
-        const val CARD_ORD = "card_ord"
+        const val CARD_ORD = "ord"
         const val BUTTON_COUNT = "button_count"
         const val NEXT_REVIEW_TIMES = "next_review_times"
         const val MEDIA_FILES = "media_files"
