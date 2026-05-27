@@ -15,6 +15,11 @@ window.onerror = function(msg, src, line, col, err) {
     return false;
 };
 
+window.onunhandledrejection = function(event) {
+    var r = event.reason;
+    diag('unhandledrejection: ' + (r && r.message ? r.message : r) + ' stack=' + (r && r.stack));
+};
+
 diag('shim script tag executing');
 
 // Configure MathJax BEFORE the script loads — startup reads window.MathJax.
@@ -57,9 +62,30 @@ let pipelineReady = false;
             style: 'default',
             locale: 'en',
             modality: 'speech',
-            // Mathmaps live next to this shim. Relative path resolves against
-            // the document URL (https://appassets.androidplatform.net/assets/math/).
-            json: 'mathmaps/'
+            json: 'mathmaps/',
+            // Custom loader gives us explicit fetch + logging instead of
+            // SRE's opaque XHR. We control the URL, see the response, and
+            // surface failures via diag().
+            custom: function(locale) {
+                return new Promise(async function(resolve, reject) {
+                    var url = 'mathmaps/' + locale + '.json';
+                    diag('customLoader: locale=' + locale + ' url=' + url);
+                    try {
+                        var res = await fetch(url);
+                        diag('customLoader: status=' + res.status + ' for ' + locale);
+                        if (!res.ok) {
+                            reject(new Error('mathmap ' + locale + ' fetch ' + res.status));
+                            return;
+                        }
+                        var text = await res.text();
+                        diag('customLoader: got ' + text.length + ' bytes for ' + locale);
+                        resolve(text);
+                    } catch (e) {
+                        diag('customLoader: exception for ' + locale + ': ' + e.message);
+                        reject(e);
+                    }
+                });
+            }
         });
         diag('SRE.setupEngine returned');
 
