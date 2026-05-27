@@ -211,12 +211,14 @@ private fun SpikeScreen() {
                     MathView(
                         html = card.displayHtmlQuestion,
                         modifier = Modifier.fillMaxWidth(),
+                        onLog = append,
                     )
                     if (revealAnswer) {
                         Text("A:", style = MaterialTheme.typography.labelMedium)
                         MathView(
                             html = card.displayHtmlAnswer,
                             modifier = Modifier.fillMaxWidth(),
+                            onLog = append,
                         )
                     } else {
                         Button(onClick = { revealAnswer = true }) { Text("Show answer") }
@@ -300,7 +302,10 @@ private fun SpikeScreen() {
                     append("speechA: ${c.speechAnswer}")
                 },
             ) { Text("Show speech text") }
+        }
 
+        // Read aloud lives on its own row so it doesn't overflow off-screen.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 enabled = currentCard != null,
                 onClick = {

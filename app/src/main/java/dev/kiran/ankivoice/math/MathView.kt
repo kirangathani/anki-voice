@@ -24,17 +24,17 @@ import androidx.webkit.WebViewAssetLoader
 /**
  * Displays Anki card HTML (possibly containing MathJax LaTeX) in a WebView.
  *
- * Auto-sizes height to content: a ResizeObserver in the page posts the body's
- * scrollHeight back through [SizeBridge], which updates a Compose state so
- * the AndroidView modifier re-applies the right height.
+ * Tries to auto-size height to content via a JS ResizeObserver → Kotlin bridge.
+ * Falls back to a generous default height (300.dp) if the bridge never fires
+ * so content is always visible. Caller may pass [onLog] to see bridge events.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun MathView(html: String, modifier: Modifier = Modifier) {
+fun MathView(html: String, modifier: Modifier = Modifier, onLog: (String) -> Unit = {}) {
     val density = LocalDensity.current
-    // Start with a small placeholder height; replaced as soon as JS reports the
-    // real content height.
-    var measuredHeight by remember(html) { mutableStateOf(80.dp) }
+    // Default to something tall enough that most cards display fully even if
+    // the auto-size bridge fails silently. Reset on every new card.
+    var measuredHeight by remember(html) { mutableStateOf(300.dp) }
 
     AndroidView(
         modifier = modifier.height(measuredHeight),
@@ -54,9 +54,13 @@ fun MathView(html: String, modifier: Modifier = Modifier) {
                     ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
                 }
                 addJavascriptInterface(
-                    SizeBridge { pxHeight ->
+                    SizeBridge(onLog) { pxHeight ->
                         val dp = with(density) { pxHeight.toDp() }
-                        measuredHeight = dp
+                        // Only grow — avoids the WebView shrinking to its initial
+                        // pre-MathJax size on intermediate ResizeObserver fires.
+                        if (dp > measuredHeight) {
+                            measuredHeight = dp
+                        }
                     },
                     "AndroidSizeBridge",
                 )
@@ -75,14 +79,18 @@ fun MathView(html: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * JS-side `AndroidSizeBridge.setHeight(px)` posts back here. The call lands on
- * a binder thread; we hop to main before updating Compose state.
+ * JS-side `AndroidSizeBridge.setHeight(px)` posts back here. The @JavascriptInterface
+ * method runs on a binder thread; we hop to main before updating Compose state.
  */
-private class SizeBridge(private val onHeightPx: (Int) -> Unit) {
+private class SizeBridge(
+    private val onLog: (String) -> Unit,
+    private val onHeightPx: (Int) -> Unit,
+) {
     private val main = Handler(Looper.getMainLooper())
 
     @JavascriptInterface
     fun setHeight(pxHeight: Int) {
+        onLog("[mathview.bridge] setHeight($pxHeight px)")
         main.post { onHeightPx(pxHeight) }
     }
 }
