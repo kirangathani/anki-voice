@@ -170,13 +170,38 @@ class TtsEngine(
     }
 
     private fun fixMathPronunciation(text: String): String {
-        // Inside math, standalone single-letter 'a' is the variable, not an
-        // article. TTS reads it as schwa ("uh") instead of the letter ("ay").
-        // Force letter reading by spelling it out. Same for 'I' (pronoun/letter).
-        return text
-            .replace(Regex("""\bA\b"""), "letter A")
-            .replace(Regex("""\ba\b"""), "letter A")
-            .replace(Regex("""\bI\b"""), "letter I")
+        // Applied ONLY inside [[MATH]] chunks — so aggressive substitution is
+        // safe; prose isn't affected. Goal: make SRE's ClearSpeak output sound
+        // like how a person actually reads equations.
+        var out = text
+
+        // 1. Drop verbose fraction boilerplate.
+        //    "the fraction with numerator X and denominator Y" → "X all over Y"
+        out = out.replace(
+            Regex("""\bthe fraction with numerator\s+(.+?)\s+and denominator\s+""", RegexOption.IGNORE_CASE),
+            "$1 all over ",
+        )
+        //    "the fraction X over Y" → "X over Y"
+        out = out.replace(Regex("""\bthe fraction\s+""", RegexOption.IGNORE_CASE), "")
+
+        // 2. Common finance-operator expansions that SRE leaves as letter
+        //    sequences ("Cov sub a comma b").
+        out = out.replace(
+            Regex("""\bCov\s+sub\s+(\S+)\s+comma\s+(\S+)""", RegexOption.IGNORE_CASE),
+            "covariance of $1 and $2",
+        )
+        out = out.replace(Regex("""\bCov\b"""), "covariance")
+        out = out.replace(Regex("""\bVar\b"""), "variance")
+
+        // 3. Phonetic substitution for single letters TTS routinely mispronounces.
+        //    "a" → article schwa ("uh"); "I" → pronoun ("eye" is actually fine but
+        //    be explicit). Order matters: capital first so lowercase replacement
+        //    doesn't run twice.
+        out = out.replace(Regex("""\bA\b"""), "ay")
+        out = out.replace(Regex("""\ba\b"""), "ay")
+        out = out.replace(Regex("""\bI\b"""), "eye")
+
+        return out
     }
 
     /** Strips marker tokens for display purposes. */
