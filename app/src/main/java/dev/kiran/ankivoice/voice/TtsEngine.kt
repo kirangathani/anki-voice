@@ -120,6 +120,72 @@ class TtsEngine(
     }
 
     /**
+     * Main speak entry point. Auto-detects which pipeline produced the text:
+     *  - Contains [[MATH_START]] markers → SRE pipeline, use [speakMarked].
+     *  - Otherwise → LLM pipeline with period-padded letters, use [speakLlmText].
+     *
+     * Adjacent period-padded letters (e.g. "A. L." from `a_L`) get an explicit
+     * silence injected between them so TTS doesn't slur them into one syllable
+     * ("A. L." → was being read as "ale").
+     */
+    suspend fun speakSmart(text: String) {
+        val engine = ready.await()
+        if (text.isBlank()) return
+        if (text.contains("[[MATH_START]]")) {
+            speakMarked(text)
+        } else {
+            speakLlmText(engine, text)
+        }
+    }
+
+    /**
+     * Speaks LLM output by splitting at adjacent period-padded letter
+     * boundaries and inserting explicit 350ms silence between each. Forces a
+     * real pause between letters of a subscript like "A. L." so TTS pronounces
+     * them as distinct letters instead of running them together.
+     */
+    private suspend fun speakLlmText(engine: TextToSpeech, text: String) {
+        engine.setSpeechRate(speechRate)
+        val parts = splitOnAdjacentLetters(text)
+        for ((i, part) in parts.withIndex()) {
+            val trimmed = part.trim()
+            if (trimmed.isNotEmpty()) speakChunk(engine, trimmed)
+            // Insert silence between parts — only between, not after the last one.
+            if (i < parts.size - 1) playSilence(engine, 350)
+        }
+    }
+
+    /**
+     * Splits [text] at the boundary between two adjacent period-padded letters.
+     * E.g. "A. L. times B. over C." → ["A. ", "L. times B. over C."].
+     * "covariance of A. and B." doesn't get split because "A." is followed by "and",
+     * not another single letter.
+     */
+    private fun splitOnAdjacentLetters(text: String): List<String> {
+        val pattern = Regex("""([A-Za-z]\.)(?=\s+[A-Za-z]\.)""")
+        val parts = mutableListOf<String>()
+        var lastIndex = 0
+        for (match in pattern.findAll(text)) {
+            parts.add(text.substring(lastIndex, match.range.last + 1))
+            lastIndex = match.range.last + 1
+        }
+        parts.add(text.substring(lastIndex))
+        return parts
+    }
+
+    private suspend fun playSilence(engine: TextToSpeech, durationMs: Long) {
+        val id = UUID.randomUUID().toString()
+        val deferred = CompletableDeferred<Unit>()
+        pending[id] = deferred
+        val rc = engine.playSilentUtterance(durationMs, TextToSpeech.QUEUE_FLUSH, id)
+        if (rc == TextToSpeech.ERROR) {
+            pending.remove(id)
+            return  // silence is non-critical; don't throw
+        }
+        deferred.await()
+    }
+
+    /**
      * Speaks [text] containing [[MATH_START]]...[[MATH_END]] markers. Splits at
      * boundaries and uses [speechRate] for prose, [mathRate] for math chunks.
      * Also rewrites standalone 'a' / 'I' inside math chunks to 'letter A' /
