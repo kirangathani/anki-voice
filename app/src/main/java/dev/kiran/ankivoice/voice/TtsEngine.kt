@@ -22,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 class TtsEngine(
     context: Context,
     private val onLog: (String) -> Unit = {},
+    private val speechRate: Float = 0.9f,
+    private val pitch: Float = 1.0f,
 ) {
     private val ready = CompletableDeferred<TextToSpeech>()
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
@@ -59,9 +61,12 @@ class TtsEngine(
         }
         try {
             tts.language = Locale.US
+            tts.setSpeechRate(speechRate)
+            tts.setPitch(pitch)
             pickBestVoice()
+            logAvailableVoices()
             ready.complete(tts)
-            onLog("[tts] ready")
+            onLog("[tts] ready rate=$speechRate pitch=$pitch")
         } catch (e: Exception) {
             ready.completeExceptionally(e)
         }
@@ -76,9 +81,23 @@ class TtsEngine(
             .maxByOrNull { it.quality }
         if (best != null) {
             tts.voice = best
-            onLog("[tts] voice=${best.name} q=${best.quality} locale=${best.locale}")
+            onLog("[tts] picked voice=${best.name} q=${best.quality} locale=${best.locale}")
         } else {
             onLog("[tts] no preferred voice; using engine default")
+        }
+    }
+
+    /** Lists all installed English voices so we can see what's available. */
+    private fun logAvailableVoices() {
+        val voices = tts.voices ?: return
+        val englishVoices = voices
+            .filter { it.locale.language == "en" }
+            .filterNot { it.features?.contains("notInstalled") == true }
+            .filterNot { it.isNetworkConnectionRequired }
+            .sortedByDescending { it.quality }
+        onLog("[tts] ${englishVoices.size} en voices available:")
+        englishVoices.take(10).forEach { v ->
+            onLog("[tts]   ${v.name} q=${v.quality} locale=${v.locale}")
         }
     }
 
