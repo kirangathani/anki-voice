@@ -2,7 +2,9 @@ package dev.kiran.ankivoice.math
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -28,9 +30,15 @@ class MathPipelineError(message: String) : RuntimeException(message)
  * Safe to call [extractSpeech] concurrently — calls are serialised internally.
  *
  * Threading: WebView ops happen on Main. Callers can be on any dispatcher.
+ *
+ * @param onLog callback for diagnostic messages — JS console, bridge calls,
+ *              and load milestones. Defaults to no-op.
  */
 @SuppressLint("SetJavaScriptEnabled")
-class MathPipeline(context: Context) {
+class MathPipeline(
+    context: Context,
+    private val onLog: (String) -> Unit = {},
+) {
 
     private val appContext: Context = context.applicationContext
     private val mutex = Mutex()
@@ -39,11 +47,20 @@ class MathPipeline(context: Context) {
 
     private inner class Bridge {
         @JavascriptInterface
-        fun onReady() { ready.complete(Unit) }
+        fun onReady() {
+            onLog("[mathpipe] JS reports ready")
+            ready.complete(Unit)
+        }
 
         @JavascriptInterface
         fun onError(message: String) {
+            onLog("[mathpipe] JS reports error: $message")
             ready.completeExceptionally(MathPipelineError(message))
+        }
+
+        @JavascriptInterface
+        fun log(message: String) {
+            onLog("[mathpipe.js] $message")
         }
     }
 
@@ -53,6 +70,7 @@ class MathPipeline(context: Context) {
      */
     suspend fun warmUp(): Unit = withContext(Dispatchers.Main) {
         if (webView == null) {
+            onLog("[mathpipe] creating WebView")
             val assetLoader = WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(appContext))
                 .build()
@@ -60,13 +78,28 @@ class MathPipeline(context: Context) {
             webView = WebView(appContext).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(msg: ConsoleMessage): Boolean {
+                        onLog("[mathpipe.console ${msg.messageLevel()}] ${msg.message()} (${msg.sourceId()}:${msg.lineNumber()})")
+                        return true
+                    }
+                }
                 webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: WebView,
                         request: WebResourceRequest,
-                    ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+                    ): WebResourceResponse? {
+                        val resp = assetLoader.shouldInterceptRequest(request.url)
+                        onLog("[mathpipe.net] ${request.url} -> ${if (resp != null) "asset" else "passthrough"}")
+                        return resp
+                    }
+
+                    override fun onPageFinished(view: WebView, url: String) {
+                        onLog("[mathpipe] onPageFinished: $url")
+                    }
                 }
                 addJavascriptInterface(Bridge(), "AndroidBridge")
+                onLog("[mathpipe] loadUrl pipeline.html")
                 loadUrl("https://appassets.androidplatform.net/assets/math/pipeline.html")
             }
         }

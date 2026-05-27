@@ -74,16 +74,19 @@ private fun SpikeScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Single MathPipeline for the app's lifetime — owns one hidden WebView.
-    val mathPipeline = remember { MathPipeline(context) }
-    val repo = remember { AnkiRepository(context, mathPipeline) }
-
     val logState = remember { MutableStateFlow<List<String>>(emptyList()) }
     val log by logState.asStateFlow().collectAsState()
-    val append: (String) -> Unit = { line ->
-        val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-        logState.value = logState.value + "$ts  $line"
+    val append: (String) -> Unit = remember {
+        { line ->
+            val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+            logState.value = logState.value + "$ts  $line"
+        }
     }
+
+    // Single MathPipeline for the app's lifetime — owns one hidden WebView.
+    // Pass `append` as the diagnostic sink so JS console + bridge events surface in our UI log.
+    val mathPipeline = remember { MathPipeline(context, onLog = append) }
+    val repo = remember { AnkiRepository(context, mathPipeline) }
 
     var permissionGranted by remember {
         mutableStateOf(

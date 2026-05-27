@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <title>anki-voice math pipeline</title>
 <script>
+// Helper: log to both Kotlin (if bridge ready) and JS console.
+function diag(msg) {
+    try { console.log('[shim] ' + msg); } catch (_) {}
+    try { if (window.AndroidBridge) AndroidBridge.log(msg); } catch (_) {}
+}
+
+window.onerror = function(msg, src, line, col, err) {
+    diag('window.onerror: ' + msg + ' @ ' + src + ':' + line + ':' + col + ' stack=' + (err && err.stack));
+    return false;
+};
+
+diag('shim script tag executing');
+
 // Configure MathJax BEFORE the script loads — startup reads window.MathJax.
 window.MathJax = {
     tex: {
@@ -12,30 +25,51 @@ window.MathJax = {
         processEscapes: true
     },
     options: { enableMenu: false },
-    startup: { typeset: false }
+    startup: {
+        typeset: false,
+        ready: function() {
+            diag('MathJax startup.ready fired');
+            MathJax.startup.defaultReady();
+        }
+    }
 };
 </script>
-<script src="tex-chtml.js"></script>
-<script src="sre.js"></script>
+<script src="tex-chtml.js" onerror="diag('FATAL: tex-chtml.js failed to load')"></script>
+<script src="sre.js" onerror="diag('FATAL: sre.js failed to load')"></script>
 <script>
-// Hidden WebView whose only job is: rawHtml in, plain speechText out.
-// The visible MathView loads MathJax separately and does its own rendering.
+diag('post-script tags. typeof MathJax=' + typeof MathJax + ' typeof SRE=' + typeof SRE);
 
 let pipelineReady = false;
 
 (async function init() {
     try {
+        diag('init() entered');
+        if (typeof MathJax === 'undefined') throw new Error('MathJax global missing — tex-chtml.js never loaded');
+        if (typeof SRE === 'undefined') throw new Error('SRE global missing — sre.js never loaded');
+
+        diag('awaiting MathJax.startup.promise');
         await MathJax.startup.promise;
+        diag('MathJax ready');
+
+        diag('calling SRE.setupEngine');
         await SRE.setupEngine({
             domain: 'clearspeak',
             style: 'default',
             locale: 'en',
             modality: 'speech'
         });
+        diag('SRE.setupEngine returned');
+
         pipelineReady = true;
-        if (window.AndroidBridge) AndroidBridge.onReady();
+        if (window.AndroidBridge) {
+            diag('calling AndroidBridge.onReady');
+            AndroidBridge.onReady();
+        } else {
+            diag('AndroidBridge missing at ready time');
+        }
     } catch (e) {
-        if (window.AndroidBridge) AndroidBridge.onError('init failed: ' + (e && e.message));
+        diag('init catch: ' + (e && e.message));
+        if (window.AndroidBridge) AndroidBridge.onError('init failed: ' + (e && e.message) + ' / ' + (e && e.stack));
     }
 })();
 
@@ -44,12 +78,10 @@ let pipelineReady = false;
 function extractSpeech(rawHtml) {
     if (!pipelineReady) return JSON.stringify({ error: 'pipeline not ready' });
 
-    // Normalise non-MathJax-default delimiters to \[...\] so one regex catches all.
     let text = String(rawHtml);
     text = text.replace(/\$\$([\s\S]+?)\$\$/g, '\\[$1\\]');
     text = text.replace(/\[latex\]([\s\S]+?)\[\/latex\]/g, '\\[$1\\]');
 
-    // Split on \(...\) (inline) or \[...\] (display) preserving order.
     const re = /\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
     let out = '';
     let lastIndex = 0;
@@ -68,7 +100,6 @@ function extractSpeech(rawHtml) {
     }
     out += stripTags(text.slice(lastIndex));
 
-    // Collapse whitespace runs so TTS doesn't insert long pauses.
     out = out.replace(/\s+/g, ' ').trim();
     return JSON.stringify({ speechText: out });
 }
