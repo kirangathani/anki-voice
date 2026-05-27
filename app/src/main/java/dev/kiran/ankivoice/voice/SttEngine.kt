@@ -51,7 +51,7 @@ class SttEngine(
             if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
                 return@withContext Result.Error(-1, "No SpeechRecognizer available on device")
             }
-            suspendCancellableCoroutine { cont -> startListening(cont, languageTag) }
+            suspendCancellableCoroutine<Result> { cont -> startListening(cont, languageTag) }
         }
     }
 
