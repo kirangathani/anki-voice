@@ -366,8 +366,12 @@ private fun SpikeScreen() {
                         micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                     } else {
                         scope.launch {
-                            append("Listening... speak something into the mic.")
-                            when (val r = stt.listen()) {
+                            append("Listening (8s silence threshold; say 'done' or 'stop' to end early)...")
+                            val r = stt.listen(
+                                silenceMs = 8000,
+                                wakeWords = listOf("done", "stop", "next"),
+                            )
+                            when (r) {
                                 is SttEngine.Result.Recognized ->
                                     append("Mic transcript: '${r.transcript}'")
                                 is SttEngine.Result.NoMatch ->

@@ -41,22 +41,44 @@ class SttEngine(
     }
 
     /**
-     * Listens for one utterance. Suspends until the recogniser returns a
-     * result or errors. Serialised — concurrent calls queue.
+     * Listens for one utterance.
      *
      * @param languageTag BCP-47 language tag, default "en-US".
+     * @param silenceMs how long the user can be silent before the recogniser
+     *   treats them as done. Default 8000ms (Android's default is ~2000ms which
+     *   cuts off thinking pauses). Advisory — some recogniser implementations
+     *   ignore this hint.
+     * @param wakeWords if non-empty, partial-results mode is enabled and the
+     *   recogniser stops as soon as any of these words appears in the in-flight
+     *   transcript (case-insensitive substring match). Useful for "done" / "stop"
+     *   / "next" style explicit-end commands.
      */
-    suspend fun listen(languageTag: String = "en-US"): Result = mutex.withLock {
+    suspend fun listen(
+        languageTag: String = "en-US",
+        silenceMs: Long = 8000,
+        wakeWords: List<String> = emptyList(),
+    ): Result = mutex.withLock {
         withContext(Dispatchers.Main) {
             if (!SpeechRecognizer.isRecognitionAvailable(appContext)) {
                 return@withContext Result.Error(-1, "No SpeechRecognizer available on device")
             }
-            suspendCancellableCoroutine<Result> { cont -> startListening(cont, languageTag) }
+            suspendCancellableCoroutine<Result> { cont ->
+                startListening(cont, languageTag, silenceMs, wakeWords)
+            }
         }
     }
 
-    private fun startListening(cont: CancellableContinuation<Result>, languageTag: String) {
+    private fun startListening(
+        cont: CancellableContinuation<Result>,
+        languageTag: String,
+        silenceMs: Long,
+        wakeWords: List<String>,
+    ) {
         val recognizer = SpeechRecognizer.createSpeechRecognizer(appContext)
+        // Avoid calling stopListening() more than once when several partial-result
+        // callbacks all match the wake word in quick succession.
+        var stopRequested = false
+        val wakeLower = wakeWords.map { it.lowercase() }
 
         recognizer.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
@@ -91,7 +113,22 @@ class SttEngine(
                 }
             }
 
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onPartialResults(partialResults: Bundle?) {
+                if (stopRequested || wakeLower.isEmpty()) return
+                val partial = partialResults
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    ?.lowercase()
+                    .orEmpty()
+                if (partial.isEmpty()) return
+                val hit = wakeLower.firstOrNull { partial.contains(it) }
+                if (hit != null) {
+                    stopRequested = true
+                    onLog("[stt] wake word '$hit' matched in partial '$partial', stopping")
+                    try { recognizer.stopListening() } catch (_: Throwable) {}
+                }
+            }
+
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
 
@@ -99,7 +136,14 @@ class SttEngine(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, wakeLower.isNotEmpty())
+            // Hint extras: how long silence before recogniser treats utterance
+            // as complete. Default Android value is ~2000ms which is too short
+            // for thinking pauses. These are advisory — some implementations
+            // ignore them — but worth setting.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
             // EXTRA_PREFER_OFFLINE intentionally NOT set — without an installed
             // offline language pack it errors out as ERROR_LANGUAGE_UNAVAILABLE
             // (13) instead of falling back to the cloud recogniser.
@@ -112,7 +156,7 @@ class SttEngine(
             } catch (_: Throwable) {}
         }
 
-        onLog("[stt] startListening lang=$languageTag")
+        onLog("[stt] startListening lang=$languageTag silenceMs=$silenceMs wakeWords=$wakeLower")
         recognizer.startListening(intent)
     }
 
