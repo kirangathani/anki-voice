@@ -56,7 +56,10 @@ let pipelineReady = false;
             domain: 'clearspeak',
             style: 'default',
             locale: 'en',
-            modality: 'speech'
+            modality: 'speech',
+            // Mathmaps live next to this shim. Relative path resolves against
+            // the document URL (https://appassets.androidplatform.net/assets/math/).
+            json: 'mathmaps/'
         });
         diag('SRE.setupEngine returned');
 
