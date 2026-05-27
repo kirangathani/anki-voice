@@ -48,6 +48,7 @@ import dev.kiran.ankivoice.math.MathPipeline
 import dev.kiran.ankivoice.math.MathView
 import dev.kiran.ankivoice.voice.LlmSpeechConverter
 import dev.kiran.ankivoice.voice.SpeechCache
+import dev.kiran.ankivoice.voice.SttEngine
 import dev.kiran.ankivoice.voice.TtsEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,7 @@ private fun SpikeScreen() {
     // Pass `append` as the diagnostic sink so JS console + bridge events surface in our UI log.
     val mathPipeline = remember { MathPipeline(context, onLog = append) }
     val tts = remember { TtsEngine(context, onLog = append) }
+    val stt = remember { SttEngine(context, onLog = append) }
     val llmSpeech = remember {
         val key = BuildConfig.ANTHROPIC_API_KEY
         if (key.isNotEmpty()) {
@@ -113,6 +115,19 @@ private fun SpikeScreen() {
     ) { granted ->
         permissionGranted = granted
         append(if (granted) "Permission granted." else "Permission DENIED — app cannot proceed.")
+    }
+
+    var micGranted by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val micLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        micGranted = granted
+        append(if (granted) "Microphone permission granted." else "Microphone permission DENIED.")
     }
 
     var decks by remember { mutableStateOf<List<Deck>>(emptyList()) }
@@ -338,6 +353,32 @@ private fun SpikeScreen() {
                 enabled = currentCard != null,
                 onClick = { tts.stop() },
             ) { Text("Stop") }
+        }
+
+        // Stage-1 STT diagnostic: request mic permission, capture one
+        // utterance, log the transcript. Confirms SpeechRecognizer works on
+        // this device before we build the ReviewSession state machine.
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    if (!micGranted) {
+                        append("Requesting microphone permission...")
+                        micLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    } else {
+                        scope.launch {
+                            append("Listening... speak something into the mic.")
+                            when (val r = stt.listen()) {
+                                is SttEngine.Result.Recognized ->
+                                    append("Mic transcript: '${r.transcript}'")
+                                is SttEngine.Result.NoMatch ->
+                                    append("Mic: no speech recognised.")
+                                is SttEngine.Result.Error ->
+                                    append("Mic error: ${r.message} (code=${r.code})")
+                            }
+                        }
+                    }
+                },
+            ) { Text(if (micGranted) "Test mic" else "Grant mic") }
         }
 
         Text("Log", style = MaterialTheme.typography.labelLarge)
