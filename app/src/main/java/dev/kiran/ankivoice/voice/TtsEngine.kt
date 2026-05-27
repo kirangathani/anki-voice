@@ -22,7 +22,10 @@ import java.util.concurrent.ConcurrentHashMap
 class TtsEngine(
     context: Context,
     private val onLog: (String) -> Unit = {},
+    /** Rate for plain prose. */
     private val speechRate: Float = 0.9f,
+    /** Rate for [[MATH_START]]...[[MATH_END]] blocks. Slower so equations are intelligible. */
+    private val mathRate: Float = 0.65f,
     private val pitch: Float = 1.0f,
 ) {
     private val ready = CompletableDeferred<TextToSpeech>()
@@ -105,12 +108,38 @@ class TtsEngine(
     suspend fun warmUp(): Unit { ready.await() }
 
     /**
-     * Speaks [text], replacing anything currently playing. Suspends until the
-     * utterance finishes (or errors).
+     * Speaks [text] at the prose rate, replacing anything currently playing.
+     * Suspends until the utterance finishes. For text containing
+     * [[MATH_START]]...[[MATH_END]] markers, prefer [speakMarked].
      */
     suspend fun speak(text: String) {
         val engine = ready.await()
         if (text.isBlank()) return
+        engine.setSpeechRate(speechRate)
+        speakChunk(engine, text)
+    }
+
+    /**
+     * Speaks [text] containing [[MATH_START]]...[[MATH_END]] markers. Splits at
+     * boundaries and uses [speechRate] for prose, [mathRate] for math chunks.
+     * Also rewrites standalone 'a' / 'I' inside math chunks to 'letter A' /
+     * 'letter I' so TTS doesn't read them as articles/pronouns.
+     */
+    suspend fun speakMarked(text: String) {
+        val engine = ready.await()
+        if (text.isBlank()) return
+        val chunks = parseMarkedChunks(text)
+        for (chunk in chunks) {
+            val rate = if (chunk.isMath) mathRate else speechRate
+            engine.setSpeechRate(rate)
+            val ttsText = if (chunk.isMath) fixMathPronunciation(chunk.text) else chunk.text
+            if (ttsText.isNotBlank()) speakChunk(engine, ttsText)
+        }
+        // Restore prose rate so any subsequent plain speak() calls aren't stuck slow.
+        engine.setSpeechRate(speechRate)
+    }
+
+    private suspend fun speakChunk(engine: TextToSpeech, text: String) {
         val id = UUID.randomUUID().toString()
         val deferred = CompletableDeferred<Unit>()
         pending[id] = deferred
@@ -121,6 +150,38 @@ class TtsEngine(
         }
         deferred.await()
     }
+
+    private data class MarkedChunk(val text: String, val isMath: Boolean)
+
+    private fun parseMarkedChunks(text: String): List<MarkedChunk> {
+        val pattern = Regex("""\[\[MATH_START\]\]\s*(.*?)\s*\[\[MATH_END\]\]""", RegexOption.DOT_MATCHES_ALL)
+        val chunks = mutableListOf<MarkedChunk>()
+        var lastIndex = 0
+        for (match in pattern.findAll(text)) {
+            val before = text.substring(lastIndex, match.range.first).trim()
+            if (before.isNotEmpty()) chunks.add(MarkedChunk(before, isMath = false))
+            val mathText = match.groupValues[1].trim()
+            if (mathText.isNotEmpty()) chunks.add(MarkedChunk(mathText, isMath = true))
+            lastIndex = match.range.last + 1
+        }
+        val tail = text.substring(lastIndex).trim()
+        if (tail.isNotEmpty()) chunks.add(MarkedChunk(tail, isMath = false))
+        return chunks
+    }
+
+    private fun fixMathPronunciation(text: String): String {
+        // Inside math, standalone single-letter 'a' is the variable, not an
+        // article. TTS reads it as schwa ("uh") instead of the letter ("ay").
+        // Force letter reading by spelling it out. Same for 'I' (pronoun/letter).
+        return text
+            .replace(Regex("""\bA\b"""), "letter A")
+            .replace(Regex("""\ba\b"""), "letter A")
+            .replace(Regex("""\bI\b"""), "letter I")
+    }
+
+    /** Strips marker tokens for display purposes. */
+    fun stripMarkers(text: String): String =
+        text.replace(Regex("""\s*\[\[MATH_(START|END)\]\]\s*"""), " ").trim()
 
     /** Stops any in-flight utterance. Safe to call before init. */
     fun stop() {

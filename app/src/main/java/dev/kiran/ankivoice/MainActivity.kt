@@ -298,28 +298,34 @@ private fun SpikeScreen() {
                 enabled = currentCard != null,
                 onClick = {
                     val c = currentCard ?: return@Button
-                    append("speechQ: ${c.speechQuestion}")
-                    append("speechA: ${c.speechAnswer}")
+                    append("speechQ: ${tts.stripMarkers(c.speechQuestion)}")
+                    append("speechA: ${tts.stripMarkers(c.speechAnswer)}")
                 },
             ) { Text("Show speech text") }
         }
 
-        // Read aloud lives on its own row so it doesn't overflow off-screen.
+        // Read aloud reads only what's currently on screen — question if the
+        // answer hasn't been revealed, answer if it has. No auto-continue.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 enabled = currentCard != null,
                 onClick = {
                     val c = currentCard ?: return@Button
+                    val toSpeak = if (revealAnswer) c.speechAnswer else c.speechQuestion
                     scope.launch {
                         try {
-                            tts.speak("Question. ${c.speechQuestion}")
-                            tts.speak("Answer. ${c.speechAnswer}")
+                            tts.speakMarked(toSpeak)
                         } catch (t: Throwable) {
                             append("TTS error: ${t.message}")
                         }
                     }
                 },
-            ) { Text("Read aloud") }
+            ) { Text(if (revealAnswer) "Read answer" else "Read question") }
+
+            Button(
+                enabled = currentCard != null,
+                onClick = { tts.stop() },
+            ) { Text("Stop") }
         }
 
         Text("Log", style = MaterialTheme.typography.labelLarge)

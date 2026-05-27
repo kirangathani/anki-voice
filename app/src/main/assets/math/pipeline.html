@@ -136,7 +136,9 @@ function extractSpeech(rawHtml) {
         const latex = m[1] || m[2];
         try {
             const mathml = MathJax.tex2mml(latex, { display: !!m[2] });
-            out += ' ' + SRE.toSpeech(mathml) + ' ';
+            // Wrap math speech in markers so TtsEngine can apply a slower
+            // rate + letter pronunciation fixup to just this chunk.
+            out += ' [[MATH_START]] ' + SRE.toSpeech(mathml) + ' [[MATH_END]] ';
         } catch (e) {
             out += ' math error ';
         }
