@@ -100,8 +100,9 @@ class SttEngine(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            // Prefer offline if available — faster, no network dependency.
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // EXTRA_PREFER_OFFLINE intentionally NOT set — without an installed
+            // offline language pack it errors out as ERROR_LANGUAGE_UNAVAILABLE
+            // (13) instead of falling back to the cloud recogniser.
         }
 
         cont.invokeOnCancellation {
@@ -116,15 +117,21 @@ class SttEngine(
     }
 
     private fun errorName(code: Int): String = when (code) {
-        SpeechRecognizer.ERROR_AUDIO -> "audio"
-        SpeechRecognizer.ERROR_CLIENT -> "client"
-        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "insufficient_permissions"
-        SpeechRecognizer.ERROR_NETWORK -> "network"
-        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network_timeout"
-        SpeechRecognizer.ERROR_NO_MATCH -> "no_match"
-        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "recognizer_busy"
-        SpeechRecognizer.ERROR_SERVER -> "server"
-        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "speech_timeout"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network_timeout"           // 1
+        SpeechRecognizer.ERROR_NETWORK -> "network"                            // 2
+        SpeechRecognizer.ERROR_AUDIO -> "audio"                                // 3
+        SpeechRecognizer.ERROR_SERVER -> "server"                              // 4
+        SpeechRecognizer.ERROR_CLIENT -> "client"                              // 5
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "speech_timeout"              // 6
+        SpeechRecognizer.ERROR_NO_MATCH -> "no_match"                          // 7
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "recognizer_busy"            // 8
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "insufficient_permissions" // 9
+        10 -> "too_many_requests"
+        11 -> "server_disconnected"
+        12 -> "language_not_supported"
+        13 -> "language_unavailable (no offline pack — set EXTRA_PREFER_OFFLINE=false)"
+        14 -> "cannot_check_support"
+        15 -> "cannot_listen_to_download_events"
         else -> "unknown_$code"
     }
 }
