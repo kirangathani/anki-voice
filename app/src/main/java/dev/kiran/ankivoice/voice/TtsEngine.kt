@@ -27,6 +27,24 @@ class TtsEngine(
     private val pending = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private lateinit var tts: TextToSpeech
 
+    private val progressListener = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String) {}
+        override fun onDone(utteranceId: String) {
+            pending.remove(utteranceId)?.complete(Unit)
+        }
+        @Deprecated("Old API")
+        override fun onError(utteranceId: String) {
+            pending.remove(utteranceId)?.completeExceptionally(
+                IllegalStateException("TTS error (unspecified) for utterance $utteranceId")
+            )
+        }
+        override fun onError(utteranceId: String, errorCode: Int) {
+            pending.remove(utteranceId)?.completeExceptionally(
+                IllegalStateException("TTS error $errorCode for utterance $utteranceId")
+            )
+        }
+    }
+
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             handleInit(status)
@@ -61,24 +79,6 @@ class TtsEngine(
             onLog("[tts] voice=${best.name} q=${best.quality} locale=${best.locale}")
         } else {
             onLog("[tts] no preferred voice; using engine default")
-        }
-    }
-
-    private val progressListener = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String) {}
-        override fun onDone(utteranceId: String) {
-            pending.remove(utteranceId)?.complete(Unit)
-        }
-        @Deprecated("Old API")
-        override fun onError(utteranceId: String) {
-            pending.remove(utteranceId)?.completeExceptionally(
-                IllegalStateException("TTS error (unspecified) for utterance $utteranceId")
-            )
-        }
-        override fun onError(utteranceId: String, errorCode: Int) {
-            pending.remove(utteranceId)?.completeExceptionally(
-                IllegalStateException("TTS error $errorCode for utterance $utteranceId")
-            )
         }
     }
 
