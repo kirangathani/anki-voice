@@ -114,55 +114,75 @@ class LlmSpeechConverter(
         private val JSON_MEDIA = "application/json".toMediaType()
 
         private val SYSTEM_PROMPT = """
-            You convert Anki flashcard content (HTML + LaTeX) into speech text that will be read by Android TextToSpeech (TTS). Your output goes straight to TTS — there is no further processing.
+            You convert Anki flashcard content (HTML + LaTeX) into speech text that goes straight to Android TextToSpeech (TTS). No further processing.
 
-            CRITICAL: Android TTS reads the bare letter "a" as the indefinite article ("uh"), not as the letter A. You MUST use phonetic spellings for math variables so TTS pronounces them as letters. Apply these substitutions WHEREVER a single letter appears as a math variable:
+            Two TTS problems you must design around:
+            1. TTS reads the bare letter "a" as the article ("uh") — never as the letter A.
+            2. TTS races through text without punctuation, making equations unintelligible.
 
-              a, A     → write "ay"   (not "a")
-              i, I     → write "eye"  (not "i")
-              e        → write "ee"   (when a variable. For Euler's number e, write "ee" too — TTS still gets it as the letter)
-              o, O     → write "oh"   (not "o")
-              u, U     → write "you"  (not "u")
-              B,C,D,F,G,H,J,K,L,M,N,P,Q,R,S,T,V,W,X,Y,Z, b,c,d,f,g,h,j,k,l,m,n,p,q,r,s,t,v,w,x,y,z → leave as-is, TTS reads these as letters
+            FIX BOTH WITH "PERIOD-PADDED LETTERS". Inside equations, write every single math variable letter as the letter followed by a period. The period forces TTS to:
+               (a) treat the character as a stand-alone item (so it pronounces "A" instead of "uh"), and
+               (b) pause briefly after it (so the equation reads at a deliberate pace).
 
-            For subscripts and superscripts, glue with hyphens so TTS speaks them as one unit instead of pausing between parts:
-              x_L         → "x-sub-L"
-              a_{ij}      → "ay-sub-eye-jay"
-              a_L         → "ay-sub-L"
-              R_f         → "R-sub-F"
+            DO NOT use the word "sub" or "subscript". DO NOT use hyphens between subscripted letters. Just period-separate them.
 
-            Conversion examples (output column is what you produce — note the phonetic letters):
+            Period-padding examples (output column is exactly what you write):
 
-              Input LaTeX                          Output speech text
-              \frac{a}{b}                          ay over B
-              \frac{X+Y}{Z}                        X plus Y, all over Z
-              \frac{X}{Y+Z}                        X over the quantity Y plus Z
-              Nested fractions: outer "all over" inner.
-              x_L                                  x-sub-L
-              a_{ij}                               ay-sub-eye-jay
-              \sigma^2                             sigma squared
-              x^3                                  x cubed
-              e^x                                  ee to the x
-              \sqrt{x}                             square root of x
-              \sum_{i=1}^{n}                       sum from eye equals 1 to N
-              \int_0^1                             integral from 0 to 1
-              \text{Cov}_{a,b}                     covariance of ay and B
-              \text{Var}(X)                        variance of X
-              E[X]                                 expected value of X
-              \text{WACC}                          WACC
-              \text{NPV}                           N P V
-              \beta, \sigma, \mu, \rho             beta, sigma, mu, rho
+              Input LaTeX        Output
+              a                  A.
+              a_L                A. L.
+              R_f                R. F.
+              a_{ij}             A. I. J.
+              x_t                X. T.
+              y_{t+1}            Y. T plus 1.
 
-            Full worked example:
+            For superscripts/powers, use natural English (no period-padding needed):
+
+              x^2                X. squared
+              e^x                E. to the X.
+              x^n                X. to the N.
+
+            For fractions, use "over" or "all over":
+
+              \frac{a}{b}                    A. over B.
+              \frac{X+Y}{Z}                  X plus Y, all over Z.
+              \frac{X}{Y+Z}                  X over the quantity Y plus Z.
+              \frac{a_L}{\text{Cov}_{a,b}}   A. L. all over the covariance of A. and B.
+
+            Common finance / Greek notation:
+
+              \text{Cov}_{a,b}      the covariance of A. and B.
+              \text{Var}(X)         the variance of X.
+              E[X]                  the expected value of X.
+              \sigma^2              sigma squared
+              \beta                 beta
+              \mu, \rho, \pi        mu, rho, pi
+              \text{WACC}           WACC
+              \text{NPV}            N. P. V.
+              \sqrt{x}              square root of X.
+              \sum_{i=1}^{n}        the sum from I. equals 1 to N.
+
+            Full worked example (this is exactly the output style we want):
+
               Input:  "The Equity Capital Allocation: $$\frac{a_L \times \frac{B}{C}}{\text{Cov}_{a,b}}$$ Describe the formula."
-              Output: "The Equity Capital Allocation: ay-sub-L times B over C, all over the covariance of ay and B. Describe the formula."
+              Output: "The Equity Capital Allocation. A. L. times B. over C. All over the covariance of A. and B. Describe the formula."
 
-            Other rules:
-            - Strip HTML tags. Preserve prose verbatim — do not paraphrase non-math text.
-            - Add commas at logical pause points so TTS doesn't run on.
-            - In prose (outside equations), leave normal words alone — don't apply phonetic substitutions to the article "a" in "a fraction" etc.
+            Notice in the example:
+            - Every math letter has a trailing period.
+            - "sub" never appears — subscripts are just two period-padded letters next to each other.
+            - Long phrases broken by periods at logical pause points.
+            - Prose ("The Equity Capital Allocation", "Describe the formula") preserved verbatim, NOT period-padded — only equation letters get the treatment.
 
-            Output ONLY the speech text. No explanations. No quotes. No prefixes like "Speech:".
+            PROSE RULES:
+            - Strip HTML tags. Preserve prose verbatim.
+            - The article "a" in prose ("a fraction", "a variable") stays as "a" — NO period-padding for normal English words.
+            - Only apply period-padded letters inside what was a LaTeX equation.
+
+            PACE:
+            - Assume the listener is processing math while walking. Better too slow than too fast.
+            - Use periods aggressively inside equations to force pauses. Don't worry about sounding "robotic" — pace matters more.
+
+            Output ONLY the speech text. No explanations. No quotes. No prefixes like "Speech:" or "Output:".
         """.trimIndent()
     }
 }
