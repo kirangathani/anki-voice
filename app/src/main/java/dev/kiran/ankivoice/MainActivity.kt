@@ -46,6 +46,7 @@ import dev.kiran.ankivoice.anki.Deck
 import dev.kiran.ankivoice.anki.DueCard
 import dev.kiran.ankivoice.math.MathPipeline
 import dev.kiran.ankivoice.math.MathView
+import dev.kiran.ankivoice.voice.TtsEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +87,7 @@ private fun SpikeScreen() {
     // Single MathPipeline for the app's lifetime — owns one hidden WebView.
     // Pass `append` as the diagnostic sink so JS console + bridge events surface in our UI log.
     val mathPipeline = remember { MathPipeline(context, onLog = append) }
+    val tts = remember { TtsEngine(context, onLog = append) }
     val repo = remember { AnkiRepository(context, mathPipeline) }
 
     var permissionGranted by remember {
@@ -298,6 +300,21 @@ private fun SpikeScreen() {
                     append("speechA: ${c.speechAnswer}")
                 },
             ) { Text("Show speech text") }
+
+            Button(
+                enabled = currentCard != null,
+                onClick = {
+                    val c = currentCard ?: return@Button
+                    scope.launch {
+                        try {
+                            tts.speak("Question. ${c.speechQuestion}")
+                            tts.speak("Answer. ${c.speechAnswer}")
+                        } catch (t: Throwable) {
+                            append("TTS error: ${t.message}")
+                        }
+                    }
+                },
+            ) { Text("Read aloud") }
         }
 
         Text("Log", style = MaterialTheme.typography.labelLarge)
