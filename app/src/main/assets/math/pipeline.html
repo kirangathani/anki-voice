@@ -44,6 +44,21 @@ window.MathJax = {
 <script>
 diag('post-script tags. typeof MathJax=' + typeof MathJax + ' typeof SRE=' + typeof SRE);
 
+// CRITICAL: SRE auto-inits on script-load with a default jsonPath pointing
+// at JSDelivr CDN. Its actual AJAX mathmap load is deferred ~10ms via
+// setTimeout. We must call setupEngine BEFORE that 10ms timer fires so
+// engine.setup() synchronously updates SystemExternal.jsonPath to our local
+// bundled assets path. Subsequent MathMap.loadLocale() then fetches via
+// AJAX from assets/math/mathmaps/*.json (served by WebViewAssetLoader).
+if (typeof SRE !== 'undefined') {
+    try {
+        diag('pre-init: pinning SRE jsonPath to local mathmaps/');
+        SRE.setupEngine({ json: 'mathmaps/' });
+    } catch (e) {
+        diag('pre-init failed: ' + (e && e.message));
+    }
+}
+
 let pipelineReady = false;
 
 (async function init() {
