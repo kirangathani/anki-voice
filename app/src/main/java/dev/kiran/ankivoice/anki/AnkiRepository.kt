@@ -4,6 +4,22 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.text.Html
+
+/**
+ * Strips HTML tags and decodes entities into plain text suitable for display
+ * and TTS. Uses Android's built-in HTML parser (API 24+) which handles tags,
+ * entities, and nested structures correctly. Then collapses runs of whitespace
+ * so TTS doesn't insert awkward pauses where the markup used to be.
+ */
+private fun stripHtml(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    val spanned = Html.fromHtml(raw, Html.FROM_HTML_MODE_COMPACT)
+    return spanned.toString()
+        .replace(Regex("[\\t\\u00A0 ]+"), " ")   // collapse spaces/tabs/nbsp
+        .replace(Regex("\\n{3,}"), "\n\n")        // cap consecutive blank lines
+        .trim()
+}
 
 data class Deck(
     val id: Long,
@@ -78,7 +94,10 @@ class AnkiRepository(private val context: Context) {
 
         val cardCursor = resolver.query(
             AnkiContract.Card.uri(noteId, cardOrd),
-            arrayOf(AnkiContract.Card.QUESTION_SIMPLE, AnkiContract.Card.ANSWER_SIMPLE),
+            arrayOf(
+                AnkiContract.Card.QUESTION_SIMPLE,
+                AnkiContract.Card.ANSWER_PURE,
+            ),
             null, null, null,
         ) ?: return null
 
@@ -88,8 +107,8 @@ class AnkiRepository(private val context: Context) {
                 noteId = noteId,
                 cardOrd = cardOrd,
                 buttonCount = buttonCount,
-                question = c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.QUESTION_SIMPLE)).orEmpty(),
-                answer = c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.ANSWER_SIMPLE)).orEmpty(),
+                question = stripHtml(c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.QUESTION_SIMPLE))),
+                answer = stripHtml(c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.ANSWER_PURE))),
             )
         }
     }

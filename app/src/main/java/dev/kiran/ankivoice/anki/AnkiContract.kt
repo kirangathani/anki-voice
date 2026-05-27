@@ -39,6 +39,9 @@ object AnkiContract {
     object Card {
         const val QUESTION_SIMPLE = "question_simple"
         const val ANSWER_SIMPLE = "answer_simple"
+        // ANSWER_PURE drops the {{FrontSide}} replay and the <hr id=answer>
+        // separator that ANSWER_SIMPLE includes. Use this for TTS / display.
+        const val ANSWER_PURE = "answer_pure"
         const val DECK_ID = "deck_id"
         const val CARD_NAME = "card_name"
 
