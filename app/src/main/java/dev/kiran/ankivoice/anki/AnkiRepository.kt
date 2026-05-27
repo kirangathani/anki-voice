@@ -4,46 +4,39 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
-import android.text.Html
-
-/**
- * Strips HTML tags and decodes entities into plain text suitable for display
- * and TTS. Uses Android's built-in HTML parser (API 24+) which handles tags,
- * entities, and nested structures correctly. Then collapses runs of whitespace
- * so TTS doesn't insert awkward pauses where the markup used to be.
- */
-private fun stripHtml(raw: String?): String {
-    if (raw.isNullOrBlank()) return ""
-    val spanned = Html.fromHtml(raw, Html.FROM_HTML_MODE_COMPACT)
-    return spanned.toString()
-        .replace(Regex("[\\t\\u00A0 ]+"), " ")   // collapse spaces/tabs/nbsp
-        .replace(Regex("\\n{3,}"), "\n\n")        // cap consecutive blank lines
-        .trim()
-}
+import dev.kiran.ankivoice.math.MathPipeline
 
 data class Deck(
     val id: Long,
     val name: String,
 )
 
+/**
+ * One card the AnkiDroid scheduler has surfaced.
+ *
+ * Two parallel representations of the card's text:
+ *  - displayHtmlQuestion / displayHtmlAnswer: raw HTML (with LaTeX delimiters
+ *    intact) suitable for rendering by [dev.kiran.ankivoice.math.MathView].
+ *  - speechQuestion / speechAnswer: plain text with LaTeX blocks converted
+ *    to ClearSpeak via [MathPipeline]. Suitable for direct TTS playback.
+ */
 data class DueCard(
     val noteId: Long,
     val cardOrd: Int,
     val buttonCount: Int,
-    val question: String,
-    val answer: String,
+    val displayHtmlQuestion: String,
+    val displayHtmlAnswer: String,
+    val speechQuestion: String,
+    val speechAnswer: String,
 )
 
-/**
- * Thin wrapper over AnkiDroid's ContentProvider. Stateless — safe to construct
- * per-call or hold as a singleton. All blocking I/O; call from a background
- * dispatcher.
- */
-class AnkiRepository(private val context: Context) {
+class AnkiRepository(
+    private val context: Context,
+    private val mathPipeline: MathPipeline,
+) {
 
     private val resolver get() = context.contentResolver
 
-    /** Returns true if AnkiDroid's ContentProvider is reachable on this device. */
     fun isAnkiDroidAvailable(): Boolean {
         val info = context.packageManager.resolveContentProvider(AnkiContract.AUTHORITY, 0)
         return info != null
@@ -68,13 +61,11 @@ class AnkiRepository(private val context: Context) {
     }
 
     /**
-     * Pulls the next card AnkiDroid's scheduler would surface for [deckId].
-     * Returns null if nothing is due (or the deck is empty).
-     *
-     * Implementation note: AnkiDroid's ReviewInfo endpoint requires a selection
-     * string of the form "limit=?,deckID=?" with positional args.
+     * Pulls the next card AnkiDroid's scheduler would surface, then runs each
+     * side through [MathPipeline] to derive TTS-ready speech text. Suspending
+     * because the math pipeline lives on a WebView (Main dispatcher).
      */
-    fun nextDueCard(deckId: Long): DueCard? {
+    suspend fun nextDueCard(deckId: Long): DueCard? {
         val reviewCursor = resolver.query(
             AnkiContract.ReviewInfo.CONTENT_URI,
             null,
@@ -101,26 +92,27 @@ class AnkiRepository(private val context: Context) {
             null, null, null,
         ) ?: return null
 
-        return cardCursor.use { c ->
+        val (rawQ, rawA) = cardCursor.use { c ->
             if (!c.moveToFirst()) return null
-            DueCard(
-                noteId = noteId,
-                cardOrd = cardOrd,
-                buttonCount = buttonCount,
-                question = stripHtml(c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.QUESTION_SIMPLE))),
-                answer = stripHtml(c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.ANSWER_PURE))),
-            )
+            val q = c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.QUESTION_SIMPLE)).orEmpty()
+            val a = c.getString(c.getColumnIndexOrThrow(AnkiContract.Card.ANSWER_PURE)).orEmpty()
+            q to a
         }
+
+        val speechQ = mathPipeline.extractSpeech(rawQ)
+        val speechA = mathPipeline.extractSpeech(rawA)
+
+        return DueCard(
+            noteId = noteId,
+            cardOrd = cardOrd,
+            buttonCount = buttonCount,
+            displayHtmlQuestion = rawQ,
+            displayHtmlAnswer = rawA,
+            speechQuestion = speechQ,
+            speechAnswer = speechA,
+        )
     }
 
-    /**
-     * Submits the user's grade for [card]. AnkiDroid routes this to
-     * `col.sched.answerCard(...)`, identical to its own review buttons.
-     *
-     * @param ease one of [AnkiContract.Ease]: AGAIN=1, HARD=2, GOOD=3, EASY=4.
-     * @param timeTakenMs how long the user spent on this card, in ms.
-     * @return rows updated (1 on success).
-     */
     fun submitReview(card: DueCard, ease: Int, timeTakenMs: Long): Int {
         require(ease in 1..4) { "ease must be 1..4, got $ease" }
         val values = ContentValues().apply {
@@ -132,10 +124,6 @@ class AnkiRepository(private val context: Context) {
         return resolver.update(AnkiContract.ReviewInfo.CONTENT_URI, values, null, null)
     }
 
-    /**
-     * Asks AnkiDroid to sync with AnkiWeb. AnkiDroid rate-limits this to once
-     * per 5 minutes. Fire-and-forget — the broadcast returns immediately.
-     */
     fun requestSync() {
         val intent = Intent(AnkiContract.DO_SYNC_ACTION).apply {
             setPackage(AnkiContract.ANKIDROID_PACKAGE)
@@ -143,10 +131,6 @@ class AnkiRepository(private val context: Context) {
         context.sendBroadcast(intent)
     }
 
-    /**
-     * Dumps the column names returned for a given URI — useful when the spike
-     * blows up on `getColumnIndexOrThrow` because AnkiDroid renamed something.
-     */
     fun debugColumnsFor(uri: android.net.Uri): List<String> {
         val cursor: Cursor = resolver.query(uri, null, null, null, null) ?: return emptyList()
         return cursor.use { it.columnNames.toList() }

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>anki-voice math pipeline</title>
+<script>
+// Configure MathJax BEFORE the script loads — startup reads window.MathJax.
+window.MathJax = {
+    tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true
+    },
+    options: { enableMenu: false },
+    startup: { typeset: false }
+};
+</script>
+<script src="tex-chtml.js"></script>
+<script src="sre.js"></script>
+<script>
+// Hidden WebView whose only job is: rawHtml in, plain speechText out.
+// The visible MathView loads MathJax separately and does its own rendering.
+
+let pipelineReady = false;
+
+(async function init() {
+    try {
+        await MathJax.startup.promise;
+        await SRE.setupEngine({
+            domain: 'clearspeak',
+            style: 'default',
+            locale: 'en',
+            modality: 'speech'
+        });
+        pipelineReady = true;
+        if (window.AndroidBridge) AndroidBridge.onReady();
+    } catch (e) {
+        if (window.AndroidBridge) AndroidBridge.onError('init failed: ' + (e && e.message));
+    }
+})();
+
+// Called from Kotlin via evaluateJavascript.
+// Returns a JSON-encoded { speechText } or { error }.
+function extractSpeech(rawHtml) {
+    if (!pipelineReady) return JSON.stringify({ error: 'pipeline not ready' });
+
+    // Normalise non-MathJax-default delimiters to \[...\] so one regex catches all.
+    let text = String(rawHtml);
+    text = text.replace(/\$\$([\s\S]+?)\$\$/g, '\\[$1\\]');
+    text = text.replace(/\[latex\]([\s\S]+?)\[\/latex\]/g, '\\[$1\\]');
+
+    // Split on \(...\) (inline) or \[...\] (display) preserving order.
+    const re = /\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]/g;
+    let out = '';
+    let lastIndex = 0;
+    let m;
+
+    while ((m = re.exec(text)) !== null) {
+        out += stripTags(text.slice(lastIndex, m.index));
+        const latex = m[1] || m[2];
+        try {
+            const mathml = MathJax.tex2mml(latex, { display: !!m[2] });
+            out += ' ' + SRE.toSpeech(mathml) + ' ';
+        } catch (e) {
+            out += ' math error ';
+        }
+        lastIndex = re.lastIndex;
+    }
+    out += stripTags(text.slice(lastIndex));
+
+    // Collapse whitespace runs so TTS doesn't insert long pauses.
+    out = out.replace(/\s+/g, ' ').trim();
+    return JSON.stringify({ speechText: out });
+}
+
+function stripTags(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || '';
+}
+</script>
+</head>
+<body></body>
+</html>

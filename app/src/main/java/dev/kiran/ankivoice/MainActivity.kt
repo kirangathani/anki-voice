@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,11 +40,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import dev.kiran.ankivoice.BuildConfig
 import dev.kiran.ankivoice.anki.AnkiContract
 import dev.kiran.ankivoice.anki.AnkiRepository
 import dev.kiran.ankivoice.anki.Deck
 import dev.kiran.ankivoice.anki.DueCard
+import dev.kiran.ankivoice.math.MathPipeline
+import dev.kiran.ankivoice.math.MathView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,7 +73,10 @@ class MainActivity : ComponentActivity() {
 private fun SpikeScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val repo = remember { AnkiRepository(context) }
+
+    // Single MathPipeline for the app's lifetime — owns one hidden WebView.
+    val mathPipeline = remember { MathPipeline(context) }
+    val repo = remember { AnkiRepository(context, mathPipeline) }
 
     val logState = remember { MutableStateFlow<List<String>>(emptyList()) }
     val log by logState.asStateFlow().collectAsState()
@@ -99,17 +103,22 @@ private fun SpikeScreen() {
     var currentCard by remember { mutableStateOf<DueCard?>(null) }
     var revealAnswer by remember { mutableStateOf(false) }
     var cardStartedAtMs by remember { mutableStateOf(0L) }
+    var mathPipelineReady by remember { mutableStateOf(false) }
 
     fun fetchNextCard(deck: Deck) {
-        scope.launchIo(append) {
-            val card = repo.nextDueCard(deck.id)
-            currentCard = card
-            revealAnswer = false
-            cardStartedAtMs = System.currentTimeMillis()
-            if (card == null) {
-                append("No more due cards for '${deck.name}'.")
-            } else {
-                append("Fetched card noteId=${card.noteId} ord=${card.cardOrd} buttons=${card.buttonCount}")
+        scope.launch {
+            try {
+                val card = withContext(Dispatchers.IO) { repo.nextDueCard(deck.id) }
+                currentCard = card
+                revealAnswer = false
+                cardStartedAtMs = System.currentTimeMillis()
+                if (card == null) {
+                    append("No more due cards for '${deck.name}'.")
+                } else {
+                    append("Fetched card noteId=${card.noteId} ord=${card.cardOrd} buttons=${card.buttonCount}")
+                }
+            } catch (t: Throwable) {
+                append("ERROR: ${t.javaClass.simpleName}: ${t.message}")
             }
         }
     }
@@ -126,6 +135,18 @@ private fun SpikeScreen() {
 
     LaunchedEffect(Unit) {
         append("Spike starting. build=${BuildConfig.GIT_SHA} at ${BuildConfig.BUILD_TIME}")
+
+        // Warm the math pipeline early so it's ready by the time a card needs processing.
+        scope.launch {
+            try {
+                mathPipeline.warmUp()
+                mathPipelineReady = true
+                append("MathPipeline ready.")
+            } catch (t: Throwable) {
+                append("MathPipeline FAILED: ${t.message}")
+            }
+        }
+
         val available = repo.isAnkiDroidAvailable()
         append("AnkiDroid ContentProvider reachable: $available")
         if (!available) {
@@ -161,7 +182,6 @@ private fun SpikeScreen() {
                     scope.launchIo(append) {
                         val result = repo.listDecks()
                         decks = result
-                        // Auto-pick the first non-Default deck if possible.
                         selectedDeck = result.firstOrNull { !it.name.equals("Default", ignoreCase = true) }
                             ?: result.firstOrNull()
                         append("Loaded ${result.size} decks. Selected: ${selectedDeck?.name ?: "<none>"}")
@@ -171,7 +191,7 @@ private fun SpikeScreen() {
             ) { Text("List decks") }
 
             Button(
-                enabled = permissionGranted && selectedDeck != null,
+                enabled = permissionGranted && selectedDeck != null && mathPipelineReady,
                 onClick = { selectedDeck?.let(::fetchNextCard) },
             ) { Text("Next due card") }
         }
@@ -183,17 +203,22 @@ private fun SpikeScreen() {
             ) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Q:", style = MaterialTheme.typography.labelMedium)
-                    Text(card.question, style = MaterialTheme.typography.bodyLarge)
+                    MathView(
+                        html = card.displayHtmlQuestion,
+                        modifier = Modifier.fillMaxWidth().height(160.dp),
+                    )
                     if (revealAnswer) {
                         Text("A:", style = MaterialTheme.typography.labelMedium)
-                        Text(card.answer, style = MaterialTheme.typography.bodyLarge)
+                        MathView(
+                            html = card.displayHtmlAnswer,
+                            modifier = Modifier.fillMaxWidth().height(360.dp),
+                        )
                     } else {
                         Button(onClick = { revealAnswer = true }) { Text("Show answer") }
                     }
                 }
             }
 
-            // Grade buttons only after the answer is revealed — matches Anki UX.
             if (revealAnswer) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -207,6 +232,7 @@ private fun SpikeScreen() {
             }
         }
 
+        // Diagnostic row: sync, dump columns, math test, show speech.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 enabled = permissionGranted,
@@ -230,6 +256,45 @@ private fun SpikeScreen() {
                     }
                 },
             ) { Text("Dump columns") }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = mathPipelineReady,
+                onClick = {
+                    scope.launch {
+                        try {
+                            val q = """The Equity Capital Allocation: $$\frac{a_L \times \frac{B}{C}}{\text{Cov}_{a,b}}$$ Describe the formula."""
+                            val a = """It's the fraction with numerator a-sub-L times B over C, denominator covariance of a and b. Also note: \(\sigma^2 = E[(X - \mu)^2]\)."""
+                            val speechQ = mathPipeline.extractSpeech(q)
+                            val speechA = mathPipeline.extractSpeech(a)
+                            currentCard = DueCard(
+                                noteId = -1L,
+                                cardOrd = 0,
+                                buttonCount = 4,
+                                displayHtmlQuestion = q,
+                                displayHtmlAnswer = a,
+                                speechQuestion = speechQ,
+                                speechAnswer = speechA,
+                            )
+                            revealAnswer = false
+                            cardStartedAtMs = System.currentTimeMillis()
+                            append("Test math card injected. Grade buttons won't submit (synthetic noteId).")
+                        } catch (t: Throwable) {
+                            append("ERROR injecting test card: ${t.message}")
+                        }
+                    }
+                },
+            ) { Text("Test math card") }
+
+            Button(
+                enabled = currentCard != null,
+                onClick = {
+                    val c = currentCard ?: return@Button
+                    append("speechQ: ${c.speechQuestion}")
+                    append("speechA: ${c.speechAnswer}")
+                },
+            ) { Text("Show speech text") }
         }
 
         Text("Log", style = MaterialTheme.typography.labelLarge)
