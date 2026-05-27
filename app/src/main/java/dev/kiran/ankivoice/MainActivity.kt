@@ -143,6 +143,7 @@ private fun SpikeScreen() {
     Column(
         Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -192,14 +193,17 @@ private fun SpikeScreen() {
                 }
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                GradeButton("Again") { grade(card, AnkiContract.Ease.AGAIN, "Again") }
-                GradeButton("Hard") { grade(card, AnkiContract.Ease.HARD, "Hard") }
-                GradeButton("Good") { grade(card, AnkiContract.Ease.GOOD, "Good") }
-                GradeButton("Easy") { grade(card, AnkiContract.Ease.EASY, "Easy") }
+            // Grade buttons only after the answer is revealed — matches Anki UX.
+            if (revealAnswer) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    GradeButton("Again") { grade(card, AnkiContract.Ease.AGAIN, "Again") }
+                    GradeButton("Hard") { grade(card, AnkiContract.Ease.HARD, "Hard") }
+                    GradeButton("Good") { grade(card, AnkiContract.Ease.GOOD, "Good") }
+                    GradeButton("Easy") { grade(card, AnkiContract.Ease.EASY, "Easy") }
+                }
             }
         }
 
