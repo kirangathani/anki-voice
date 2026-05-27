@@ -208,13 +208,13 @@ private fun SpikeScreen() {
                     Text("Q:", style = MaterialTheme.typography.labelMedium)
                     MathView(
                         html = card.displayHtmlQuestion,
-                        modifier = Modifier.fillMaxWidth().height(160.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     if (revealAnswer) {
                         Text("A:", style = MaterialTheme.typography.labelMedium)
                         MathView(
                             html = card.displayHtmlAnswer,
-                            modifier = Modifier.fillMaxWidth().height(360.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     } else {
                         Button(onClick = { revealAnswer = true }) { Text("Show answer") }
