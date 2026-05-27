@@ -326,7 +326,7 @@ private fun SpikeScreen() {
                     val toSpeak = if (revealAnswer) c.speechAnswer else c.speechQuestion
                     scope.launch {
                         try {
-                            tts.speakSmart(toSpeak)
+                            tts.speak(toSpeak)
                         } catch (t: Throwable) {
                             append("TTS error: ${t.message}")
                         }
