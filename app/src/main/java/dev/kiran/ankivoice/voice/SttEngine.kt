@@ -45,9 +45,10 @@ class SttEngine(
      *
      * @param languageTag BCP-47 language tag, default "en-US".
      * @param silenceMs how long the user can be silent before the recogniser
-     *   treats them as done. Default 8000ms (Android's default is ~2000ms which
-     *   cuts off thinking pauses). Advisory — some recogniser implementations
-     *   ignore this hint.
+     *   treats them as done. Default 300000ms (5 minutes) — effectively no
+     *   silence-based cutoff for normal use; the user is expected to end the
+     *   utterance with a wake word. Advisory — some recogniser implementations
+     *   cap this at lower values internally.
      * @param wakeWords if non-empty, partial-results mode is enabled and the
      *   recogniser stops as soon as any of these words appears in the in-flight
      *   transcript (case-insensitive substring match). Useful for "done" / "stop"
@@ -55,7 +56,7 @@ class SttEngine(
      */
     suspend fun listen(
         languageTag: String = "en-US",
-        silenceMs: Long = 8000,
+        silenceMs: Long = 300_000,
         wakeWords: List<String> = emptyList(),
     ): Result = mutex.withLock {
         withContext(Dispatchers.Main) {
