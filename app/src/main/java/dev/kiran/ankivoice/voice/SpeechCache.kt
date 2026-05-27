@@ -11,8 +11,10 @@ import java.security.MessageDigest
  * separate DB needed.
  */
 class SpeechCache(context: Context) {
+    // Bump the version suffix any time the LLM prompt changes — the old
+    // cache becomes irrelevant and we want fresh API calls with the new prompt.
     private val prefs = context.applicationContext.getSharedPreferences(
-        "llm_speech_cache_v1",
+        "llm_speech_cache_v2",
         Context.MODE_PRIVATE,
     )
 
