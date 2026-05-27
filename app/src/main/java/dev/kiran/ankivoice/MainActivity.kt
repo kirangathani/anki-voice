@@ -46,6 +46,8 @@ import dev.kiran.ankivoice.anki.Deck
 import dev.kiran.ankivoice.anki.DueCard
 import dev.kiran.ankivoice.math.MathPipeline
 import dev.kiran.ankivoice.math.MathView
+import dev.kiran.ankivoice.voice.LlmSpeechConverter
+import dev.kiran.ankivoice.voice.SpeechCache
 import dev.kiran.ankivoice.voice.TtsEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,7 +90,17 @@ private fun SpikeScreen() {
     // Pass `append` as the diagnostic sink so JS console + bridge events surface in our UI log.
     val mathPipeline = remember { MathPipeline(context, onLog = append) }
     val tts = remember { TtsEngine(context, onLog = append) }
-    val repo = remember { AnkiRepository(context, mathPipeline) }
+    val llmSpeech = remember {
+        val key = BuildConfig.ANTHROPIC_API_KEY
+        if (key.isNotEmpty()) {
+            append("[llm] Claude Haiku 4.5 enabled (key length=${key.length})")
+            LlmSpeechConverter(key, SpeechCache(context), onLog = append)
+        } else {
+            append("[llm] no ANTHROPIC_API_KEY set — speech will use SRE fallback")
+            null
+        }
+    }
+    val repo = remember { AnkiRepository(context, mathPipeline, llmSpeech, onLog = append) }
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -273,8 +285,8 @@ private fun SpikeScreen() {
                         try {
                             val q = """The Equity Capital Allocation: $$\frac{a_L \times \frac{B}{C}}{\text{Cov}_{a,b}}$$ Describe the formula."""
                             val a = """It's the fraction with numerator a-sub-L times B over C, denominator covariance of a and b. Also note: \(\sigma^2 = E[(X - \mu)^2]\)."""
-                            val speechQ = mathPipeline.extractSpeech(q)
-                            val speechA = mathPipeline.extractSpeech(a)
+                            val speechQ = repo.generateSpeech(q)
+                            val speechA = repo.generateSpeech(a)
                             currentCard = DueCard(
                                 noteId = -1L,
                                 cardOrd = 0,

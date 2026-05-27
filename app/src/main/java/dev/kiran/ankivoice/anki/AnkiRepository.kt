@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import dev.kiran.ankivoice.math.MathPipeline
+import dev.kiran.ankivoice.voice.LlmSpeechConverter
 
 data class Deck(
     val id: Long,
@@ -33,6 +34,8 @@ data class DueCard(
 class AnkiRepository(
     private val context: Context,
     private val mathPipeline: MathPipeline,
+    private val llmSpeech: LlmSpeechConverter? = null,
+    private val onLog: (String) -> Unit = {},
 ) {
 
     private val resolver get() = context.contentResolver
@@ -99,8 +102,8 @@ class AnkiRepository(
             q to a
         }
 
-        val speechQ = mathPipeline.extractSpeech(rawQ)
-        val speechA = mathPipeline.extractSpeech(rawA)
+        val speechQ = generateSpeech(rawQ)
+        val speechA = generateSpeech(rawA)
 
         return DueCard(
             noteId = noteId,
@@ -111,6 +114,24 @@ class AnkiRepository(
             speechQuestion = speechQ,
             speechAnswer = speechA,
         )
+    }
+
+    /**
+     * Tries the LLM converter first; on any failure (no key, network error,
+     * API rate limit) falls back to MathPipeline's SRE-based pipeline so the
+     * app still produces *some* speech text.
+     *
+     * Public so the Test-math-card debug button can use the same code path.
+     */
+    suspend fun generateSpeech(rawHtml: String): String {
+        if (llmSpeech != null) {
+            try {
+                return llmSpeech.convert(rawHtml)
+            } catch (t: Throwable) {
+                onLog("[repo] LLM failed (${t.message}); falling back to SRE pipeline")
+            }
+        }
+        return mathPipeline.extractSpeech(rawHtml)
     }
 
     fun submitReview(card: DueCard, ease: Int, timeTakenMs: Long): Int {

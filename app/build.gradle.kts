@@ -1,12 +1,21 @@
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Read local.properties (gitignored). CI workflow writes ANTHROPIC_API_KEY here
+// from the GitHub repo secret of the same name; locally devs can set it manually.
+val localProperties: Properties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val anthropicApiKey: String = localProperties.getProperty("ANTHROPIC_API_KEY", "").trim()
 
 fun gitShortSha(): String = try {
     val proc = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
@@ -32,6 +41,7 @@ android {
 
         buildConfigField("String", "GIT_SHA", "\"${gitShortSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTimestamp\"")
+        buildConfigField("String", "ANTHROPIC_API_KEY", "\"$anthropicApiKey\"")
     }
 
     buildTypes {
@@ -71,6 +81,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.webkit:webkit:1.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

@@ -33,6 +33,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Inject the Anthropic API key (if set as a repo secret) into
+      # local.properties before Gradle runs. build.gradle.kts reads it and
+      # exposes it as BuildConfig.ANTHROPIC_API_KEY. If the secret isn't set
+      # the line is "ANTHROPIC_API_KEY=" — empty string at runtime, app falls
+      # back to its non-LLM speech pipeline.
+      - name: Inject Anthropic API key
+        run: |
+          echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> local.properties
+
       # Persists the auto-generated ~/.android/debug.keystore across runs so
       # every APK is signed with the same cert. Without this, every CI build
       # would have a different signature and Android would refuse in-place
