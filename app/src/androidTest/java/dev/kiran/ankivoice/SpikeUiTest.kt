@@ -123,13 +123,24 @@ class SpikeUiTest {
             "card should inject",
             device.wait(Until.hasObject(By.text("Show answer")), CARD_TIMEOUT),
         )
-        val show = scrollTo("Show speech text")
-        assertNotNull("'Show speech text' button", show)
-        show!!.click()
+        // The injected card's MathView (WebView) recomposes asynchronously
+        // (setHeight), which can move buttons after they're located. Re-find and
+        // re-tap until the expected log appears, rather than caching one object.
+        device.waitForIdle()
         assertTrue(
             "logcat should contain 'speechQ:' after Show speech text",
-            logcatContains("speechQ:", 12_000),
+            tapUntilLog("Show speech text", "speechQ:"),
         )
+    }
+
+    /** Re-finds [buttonText] and taps it, retrying until [expectLog] appears in logcat. */
+    private fun tapUntilLog(buttonText: String, expectLog: String, attempts: Int = 5): Boolean {
+        repeat(attempts) {
+            scrollTo(buttonText)?.click()
+            if (logcatContains(expectLog, 4_000)) return true
+            device.waitForIdle()
+        }
+        return logcatContains(expectLog, 2_000)
     }
 
     /**
