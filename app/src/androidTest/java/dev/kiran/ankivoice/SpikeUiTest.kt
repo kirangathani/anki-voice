@@ -71,6 +71,33 @@ class SpikeUiTest {
         )
     }
 
+    /**
+     * "Grant mic" requests RECORD_AUDIO via the system dialog; granting it
+     * flips the button label to "Test mic". Exercises the mic-permission flow
+     * (a prerequisite for the voice/STT features). Tolerates the permission
+     * already being granted from a prior test in the run.
+     */
+    @Test
+    fun grantMic_grantsPermissionAndSwitchesToTestMic() {
+        if (device.findObject(By.text("Test mic")) != null) return // already granted
+        val grant = scrollTo("Grant mic")
+        assertNotNull("'Grant mic' button should be present", grant)
+        grant!!.click()
+        val allow = device.wait(
+            Until.findObject(By.res("com.android.permissioncontroller:id/permission_allow_foreground_only_button")),
+            6_000,
+        )
+            ?: device.wait(Until.findObject(By.res("com.android.permissioncontroller:id/permission_allow_button")), 3_000)
+            ?: device.wait(Until.findObject(By.textContains("While using")), 3_000)
+            ?: device.wait(Until.findObject(By.text("Allow")), 3_000)
+        assertNotNull("system permission Allow button should appear", allow)
+        allow!!.click()
+        assertNotNull(
+            "button should switch to 'Test mic' after granting",
+            device.wait(Until.hasObject(By.text("Test mic")), 8_000),
+        )
+    }
+
     /** Finds [text], scrolling the screen up to a few times if it is off-screen. */
     private fun scrollTo(text: String): UiObject2? {
         repeat(6) {
