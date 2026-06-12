@@ -14,6 +14,25 @@ until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1"
 done
 echo "boot complete"
 
+# Install AnkiDroid so the app's ContentProvider integration can be exercised.
+# Use the x86_64 ABI variant (matches the emulator, smaller than universal).
+# Best-effort: if it fails, the ContentProvider test skips (assumeTrue) and the
+# rest still run.
+echo "=== installing AnkiDroid ==="
+ANKI_URL=$(curl -sL https://api.github.com/repos/ankidroid/Anki-Android/releases/latest \
+  | grep -oE '"browser_download_url": *"[^"]+x86_64\.apk"' | grep -oE 'https[^"]+' | head -1)
+echo "AnkiDroid APK: ${ANKI_URL:-<none found>}"
+if [ -n "${ANKI_URL:-}" ] && curl -fsSL -o ankidroid.apk "$ANKI_URL"; then
+  adb install -r -g ankidroid.apk || echo "WARN: adb install AnkiDroid failed"
+  # Launch once to create the default collection, then return home.
+  adb shell monkey -p com.ichi2.anki -c android.intent.category.LAUNCHER 1 || true
+  sleep 25
+  adb shell input keyevent KEYCODE_HOME || true
+  echo "AnkiDroid installed + initialized"
+else
+  echo "WARN: could not fetch AnkiDroid APK; ContentProvider test will skip"
+fi
+
 # Instrumented Tier-3 UI tests (UIAutomator drives the real app).
 ./gradlew connectedDebugAndroidTest
 rc=$?

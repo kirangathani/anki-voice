@@ -11,6 +11,7 @@ import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.junit.Test
@@ -33,6 +34,15 @@ class SpikeUiTest {
 
     @Before
     fun launchApp() {
+        // If AnkiDroid is installed (CI), pre-grant its DB permission so the app
+        // starts without a permission dialog. No-op if the permission is not
+        // defined (AnkiDroid absent), which keeps non-AnkiDroid runs working.
+        try {
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .grantRuntimePermission(PKG, ANKI_PERMISSION)
+        } catch (_: Exception) {
+            // permission not defined / not grantable; fine
+        }
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         val intent = ctx.packageManager.getLaunchIntentForPackage(PKG)!!.apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -123,6 +133,33 @@ class SpikeUiTest {
     }
 
     /**
+     * AnkiDroid integration: with AnkiDroid installed and its DB permission
+     * granted (in @Before), the app should detect the ContentProvider and
+     * "List decks" should load the collection's decks. Skips when AnkiDroid is
+     * not installed (e.g., local runs).
+     */
+    @Test
+    fun listDecks_withAnkiDroid_reachableAndLoadsDecks() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        assertTrue(
+            "AnkiDroid ContentProvider should be reachable at startup",
+            logcatContains("AnkiDroid ContentProvider reachable: true", 15_000),
+        )
+        val listBtn = scrollToEnabled("List decks")
+        assertNotNull("'List decks' should be enabled with AnkiDroid + permission", listBtn)
+        listBtn!!.click()
+        assertTrue(
+            "'List decks' should load decks from AnkiDroid",
+            logcatContains("Loaded", 12_000),
+        )
+    }
+
+    private fun isAnkiDroidInstalled(): Boolean {
+        val pm = ApplicationProvider.getApplicationContext<Context>().packageManager
+        return pm.getLaunchIntentForPackage("com.ichi2.anki") != null
+    }
+
+    /**
      * Polls the app's own logcat (tag SpikeLog) for [substr]. The instrumented
      * test shares the app's UID, so it can read the app's log entries, which is
      * far more reliable than scraping the nested-scroll Compose log pane.
@@ -169,6 +206,7 @@ class SpikeUiTest {
 
     companion object {
         private const val PKG = "dev.kiran.ankivoice"
+        private const val ANKI_PERMISSION = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
         private const val LAUNCH_TIMEOUT = 15_000L
         private const val READY_TIMEOUT = 40_000L
         private const val CARD_TIMEOUT = 45_000L
