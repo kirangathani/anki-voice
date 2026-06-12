@@ -1,0 +1,60 @@
+name: CI
+
+# Runs the test suite on GitHub's hardware (reliable, fast) so the autonomous
+# agent does not need a heavy local build host. The agent pushes; this verifies.
+#
+# Tiers:
+#  - unit-tests: Tier 1, pure-JVM logic tests (fast, no emulator).
+#  - (planned) instrumented-tests: Tier 3, Android emulator + AnkiDroid +
+#    screenshot capture, added as a separate job once Tier 1 is green.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests (Tier 1, JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # build.gradle.kts reads ANTHROPIC_API_KEY from local.properties. Empty is
+      # fine for unit tests (no network/LLM exercised); kept for parity with the
+      # release build.
+      - name: Write local.properties
+        run: echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> local.properties
+
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: warn

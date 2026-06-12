@@ -118,23 +118,13 @@ class TtsEngine(
         if (text.isBlank()) return
         // Strip any internal pipeline markers (e.g. [[MATH_START]]/[[MATH_END]]
         // from the SRE fallback path) so they don't reach the TTS engine.
-        val clean = text.replace(Regex("""\s*\[\[MATH_(START|END)\]\]\s*"""), " ")
-        val parts = splitAtPausePoints(clean)
+        val clean = TtsText.stripMarkers(text)
+        val parts = TtsText.splitAtPausePoints(clean)
         for ((i, part) in parts.withIndex()) {
             val trimmed = part.trim()
             if (trimmed.isNotEmpty()) speakChunk(engine, trimmed)
             if (i < parts.size - 1) playSilence(engine, pauseMs)
         }
-    }
-
-    /**
-     * Splits text wherever a pause should occur:
-     *  - any of `.` `?` `!` `:` `;` followed by whitespace
-     *  - any run of newlines
-     */
-    private fun splitAtPausePoints(text: String): List<String> {
-        val pattern = Regex("""(?<=[.?!:;])\s+|\n+""")
-        return text.split(pattern).filter { it.isNotBlank() }
     }
 
     private suspend fun speakChunk(engine: TextToSpeech, text: String) {
@@ -172,6 +162,5 @@ class TtsEngine(
     }
 
     /** Strips internal pipeline marker tokens for display purposes. */
-    fun stripMarkers(text: String): String =
-        text.replace(Regex("""\s*\[\[MATH_(START|END)\]\]\s*"""), " ").trim()
+    fun stripMarkers(text: String): String = TtsText.stripMarkers(text)
 }

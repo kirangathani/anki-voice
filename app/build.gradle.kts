@@ -88,4 +88,10 @@ dependencies {
     implementation("androidx.compose.material3:material3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // JVM unit tests (Tier 1). Pure logic only (no Android framework, no
+    // emulator). Run with: ./gradlew testDebugUnitTest
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.truth:truth:1.4.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
