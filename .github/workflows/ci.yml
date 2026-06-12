@@ -97,42 +97,7 @@ jobs:
           arch: x86_64
           profile: pixel_5
           disable-animations: true
-          script: |
-            ./gradlew installDebug
-            adb wait-for-device
-            adb shell monkey -p dev.kiran.ankivoice -c android.intent.category.LAUNCHER 1 || true
-            # Capture the live UI, retrying until it is actually rendered. The
-            # emulator's adb can hiccup right after boot/launch, so a single dump
-            # can grab an empty/stale file; anchor on the title text and retry.
-            CAPTURED=0
-            for i in $(seq 1 12); do
-              sleep 6
-              adb exec-out screencap -p > screenshot.png 2>/dev/null || true
-              adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
-              adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true
-              if [ -s ui.xml ] && grep -qF "anki-voice spike" ui.xml; then
-                echo "UI captured on attempt $i"; CAPTURED=1; break
-              fi
-              echo "attempt $i: UI not ready yet"
-            done
-            if [ "$CAPTURED" -ne 1 ]; then
-              echo "ERROR: app UI never rendered; see screenshot.png/ui.xml artifact"; exit 1
-            fi
-            # Assert expected elements are present (Compose text lands in the
-            # accessibility tree that uiautomator reads). Fails if any regress.
-            echo "=== asserting expected UI elements ==="
-            FAIL=0
-            for label in "anki-voice spike" "List decks" "Test math card" "Grant mic"; do
-              if grep -qF "$label" ui.xml; then
-                echo "OK: found '$label'"
-              else
-                echo "MISSING: '$label'"; FAIL=1
-              fi
-            done
-            if [ "$FAIL" -ne 0 ]; then
-              echo "UI assertion failed; see ui.xml artifact"; exit 1
-            fi
-            echo "UI assertions passed"
+          script: bash scripts/ci_ui_check.sh
 
       - name: Upload screenshot + UI dump
         if: always()
