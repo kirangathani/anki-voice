@@ -59,8 +59,8 @@ jobs:
           path: app/build/reports/tests/testDebugUnitTest
           if-no-files-found: warn
 
-  ui-screenshot:
-    name: Emulator screenshot (Tier 3, UI visibility)
+  ui-check:
+    name: Emulator UI check (Tier 3, screenshot + assert)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -102,12 +102,32 @@ jobs:
             adb shell monkey -p dev.kiran.ankivoice -c android.intent.category.LAUNCHER 1 || true
             sleep 12
             adb exec-out screencap -p > screenshot.png
-            ls -la screenshot.png
+            # Dump the live UI tree and assert expected elements are present.
+            # uiautomator reads the accessibility tree, which Compose populates,
+            # so button/title text shows up here. Fails the job if the UI
+            # regresses (an element disappears).
+            adb shell uiautomator dump /sdcard/ui.xml
+            adb pull /sdcard/ui.xml ui.xml
+            echo "=== asserting expected UI elements ==="
+            FAIL=0
+            for label in "anki-voice spike" "List decks" "Test math card" "Grant mic"; do
+              if grep -qF "$label" ui.xml; then
+                echo "OK: found '$label'"
+              else
+                echo "MISSING: '$label'"; FAIL=1
+              fi
+            done
+            if [ "$FAIL" -ne 0 ]; then
+              echo "UI assertion failed; see ui.xml artifact"; exit 1
+            fi
+            echo "UI assertions passed"
 
-      - name: Upload screenshot artifact
+      - name: Upload screenshot + UI dump
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-screenshot
-          path: screenshot.png
+          name: app-ui
+          path: |
+            screenshot.png
+            ui.xml
           if-no-files-found: warn
