@@ -38,6 +38,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-spike"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GIT_SHA", "\"${gitShortSha()}\"")
         buildConfigField("String", "BUILD_TIME", "\"$buildTimestamp\"")
@@ -96,4 +97,12 @@ dependencies {
     // metadata does not match AGP's unit-test variant and silently fails to
     // land on the classpath.)
     testImplementation("junit:junit:4.13.2")
+
+    // Instrumented UI tests (Tier 3). Run on an emulator/device via
+    // ./gradlew connectedDebugAndroidTest. UIAutomator drives the real app
+    // (taps buttons, reads the Compose accessibility tree).
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 }

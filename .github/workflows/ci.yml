@@ -60,7 +60,7 @@ jobs:
           if-no-files-found: warn
 
   ui-check:
-    name: Emulator UI check (Tier 3, screenshot + assert)
+    name: Instrumented UI tests (Tier 3, emulator)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -99,7 +99,7 @@ jobs:
           disable-animations: true
           script: bash scripts/ci_ui_check.sh
 
-      - name: Upload screenshot + UI dump
+      - name: Upload screenshot, UI dump, instrumented-test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -107,4 +107,6 @@ jobs:
           path: |
             screenshot.png
             ui.xml
+            app/build/reports/androidTests/connected
+            app/build/outputs/androidTest-results/connected
           if-no-files-found: warn
