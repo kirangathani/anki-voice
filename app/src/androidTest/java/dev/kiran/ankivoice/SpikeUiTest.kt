@@ -10,6 +10,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.junit.Test
@@ -96,6 +97,46 @@ class SpikeUiTest {
             "button should switch to 'Test mic' after granting",
             device.wait(Until.hasObject(By.text("Test mic")), 8_000),
         )
+    }
+
+    /**
+     * After a card is injected, "Show speech text" writes the generated speech
+     * for the question and answer into the log ("speechQ:" / "speechA:"). This
+     * asserts that output appears, covering the speech-rendering path.
+     */
+    @Test
+    fun showSpeechText_writesSpeechToLog() {
+        val testCard = scrollToEnabled("Test math card")
+        assertNotNull("'Test math card' should enable", testCard)
+        testCard!!.click()
+        assertNotNull(
+            "card should inject",
+            device.wait(Until.hasObject(By.text("Show answer")), CARD_TIMEOUT),
+        )
+        val show = scrollTo("Show speech text")
+        assertNotNull("'Show speech text' button", show)
+        show!!.click()
+        assertTrue(
+            "log should contain 'speechQ:' after Show speech text",
+            waitForTextContains("speechQ:", 12_000),
+        )
+    }
+
+    /** Polls for a node whose text contains [substr], scrolling to find it. */
+    private fun waitForTextContains(substr: String, timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            repeat(4) {
+                if (device.findObject(By.textContains(substr)) != null) return true
+                device.swipe(
+                    device.displayWidth / 2, device.displayHeight * 3 / 4,
+                    device.displayWidth / 2, device.displayHeight / 4, 10,
+                )
+                device.waitForIdle()
+            }
+            Thread.sleep(300)
+        }
+        return device.findObject(By.textContains(substr)) != null
     }
 
     /** Finds [text], scrolling the screen up to a few times if it is off-screen. */
