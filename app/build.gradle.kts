@@ -91,7 +91,9 @@ dependencies {
 
     // JVM unit tests (Tier 1). Pure logic only (no Android framework, no
     // emulator). Run with: ./gradlew testDebugUnitTest
+    // Plain JUnit only for now; add kotlinx-coroutines-test when ReviewSession
+    // coroutine tests need it. (Google Truth was dropped: its Gradle module
+    // metadata does not match AGP's unit-test variant and silently fails to
+    // land on the classpath.)
     testImplementation("junit:junit:4.13.2")
-    testImplementation("com.google.truth:truth:1.4.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

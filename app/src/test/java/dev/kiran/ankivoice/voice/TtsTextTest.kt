@@ -1,48 +1,60 @@
 package dev.kiran.ankivoice.voice
 
-import com.google.truth.Truth.assertThat
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
  * Tier-1 unit test: pure JVM, no Android, no emulator. Proves the test loop
- * works on the autonomous host and pins [TtsText]'s documented pacing rules.
+ * works in CI and pins [TtsText]'s documented pacing rules.
  */
 class TtsTextTest {
 
     @Test
     fun splitsAtSentencePunctuationFollowedByWhitespace() {
-        assertThat(TtsText.splitAtPausePoints("One. Two? Three! Done."))
-            .containsExactly("One.", "Two?", "Three!", "Done.").inOrder()
+        assertEquals(
+            listOf("One.", "Two?", "Three!", "Done."),
+            TtsText.splitAtPausePoints("One. Two? Three! Done."),
+        )
     }
 
     @Test
     fun splitsAtColonAndSemicolon() {
-        assertThat(TtsText.splitAtPausePoints("A: B; C"))
-            .containsExactly("A:", "B;", "C").inOrder()
+        assertEquals(
+            listOf("A:", "B;", "C"),
+            TtsText.splitAtPausePoints("A: B; C"),
+        )
     }
 
     @Test
     fun splitsAtRunsOfNewlines() {
-        assertThat(TtsText.splitAtPausePoints("line1\n\nline2\nline3"))
-            .containsExactly("line1", "line2", "line3").inOrder()
+        assertEquals(
+            listOf("line1", "line2", "line3"),
+            TtsText.splitAtPausePoints("line1\n\nline2\nline3"),
+        )
     }
 
     @Test
     fun doesNotSplitDecimalWithNoTrailingWhitespace() {
         // The period in "3.14" is followed by a digit, not whitespace.
-        assertThat(TtsText.splitAtPausePoints("pi is 3.14 approx"))
-            .containsExactly("pi is 3.14 approx").inOrder()
+        assertEquals(
+            listOf("pi is 3.14 approx"),
+            TtsText.splitAtPausePoints("pi is 3.14 approx"),
+        )
     }
 
     @Test
     fun dropsBlankParts() {
-        assertThat(TtsText.splitAtPausePoints("Hello.   \n  World."))
-            .containsExactly("Hello.", "World.").inOrder()
+        assertEquals(
+            listOf("Hello.", "World."),
+            TtsText.splitAtPausePoints("Hello.   \n  World."),
+        )
     }
 
     @Test
     fun stripMarkersRemovesMathTokensAndTrims() {
-        assertThat(TtsText.stripMarkers("[[MATH_START]] x squared [[MATH_END]]"))
-            .isEqualTo("x squared")
+        assertEquals(
+            "x squared",
+            TtsText.stripMarkers("[[MATH_START]] x squared [[MATH_END]]"),
+        )
     }
 }
