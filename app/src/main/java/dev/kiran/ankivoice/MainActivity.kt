@@ -84,6 +84,10 @@ private fun SpikeScreen() {
         { line ->
             val ts = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
             logState.value = logState.value + "$ts  $line"
+            // Mirror every log line to logcat under a stable tag. Useful for
+            // on-device debugging and lets instrumented tests assert on log
+            // content without scraping the nested-scroll Compose log pane.
+            android.util.Log.i("SpikeLog", line)
         }
     }
 

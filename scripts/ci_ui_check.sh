@@ -18,10 +18,11 @@ echo "boot complete"
 ./gradlew connectedDebugAndroidTest
 rc=$?
 
-# Capture final UI state for the artifact, regardless of pass/fail.
+# Capture final UI state + the app's log for the artifact, regardless of result.
 adb exec-out screencap -p > screenshot.png 2>/dev/null || true
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 || true
 adb pull /sdcard/ui.xml ui.xml >/dev/null 2>&1 || true
+adb logcat -d -s SpikeLog:I > spikelog.txt 2>/dev/null || true
 
 if [ "$rc" -eq 0 ]; then
   echo "instrumented tests passed"

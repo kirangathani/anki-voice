@@ -107,6 +107,7 @@ jobs:
           path: |
             screenshot.png
             ui.xml
+            spikelog.txt
             app/build/reports/androidTests/connected
             app/build/outputs/androidTest-results/connected
           if-no-files-found: warn

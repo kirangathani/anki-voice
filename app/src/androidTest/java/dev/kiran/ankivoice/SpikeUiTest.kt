@@ -117,26 +117,30 @@ class SpikeUiTest {
         assertNotNull("'Show speech text' button", show)
         show!!.click()
         assertTrue(
-            "log should contain 'speechQ:' after Show speech text",
-            waitForTextContains("speechQ:", 12_000),
+            "logcat should contain 'speechQ:' after Show speech text",
+            logcatContains("speechQ:", 12_000),
         )
     }
 
-    /** Polls for a node whose text contains [substr], scrolling to find it. */
-    private fun waitForTextContains(substr: String, timeoutMs: Long): Boolean {
+    /**
+     * Polls the app's own logcat (tag SpikeLog) for [substr]. The instrumented
+     * test shares the app's UID, so it can read the app's log entries, which is
+     * far more reliable than scraping the nested-scroll Compose log pane.
+     */
+    private fun logcatContains(substr: String, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            repeat(4) {
-                if (device.findObject(By.textContains(substr)) != null) return true
-                device.swipe(
-                    device.displayWidth / 2, device.displayHeight * 3 / 4,
-                    device.displayWidth / 2, device.displayHeight / 4, 10,
-                )
-                device.waitForIdle()
+            try {
+                val proc = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-s", "SpikeLog:I"))
+                val text = proc.inputStream.bufferedReader().use { it.readText() }
+                proc.waitFor()
+                if (text.contains(substr)) return true
+            } catch (_: Exception) {
+                // ignore and retry
             }
-            Thread.sleep(300)
+            Thread.sleep(400)
         }
-        return device.findObject(By.textContains(substr)) != null
+        return false
     }
 
     /** Finds [text], scrolling the screen up to a few times if it is off-screen. */
