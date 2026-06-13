@@ -10,7 +10,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'auto/**']
   pull_request:
     branches: [main]
   workflow_dispatch:
