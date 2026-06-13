@@ -10,7 +10,7 @@ You are working autonomously on the anki-voice Android app (Kotlin + Jetpack Com
   - Unit tests live in `app/src/test/...`, pure JVM, PLAIN JUnit assertions only (Google Truth does NOT resolve under AGP here — see `app/src/test/.../voice/TtsTextTest.kt`).
   - Instrumented tests live in `app/src/androidTest/.../SpikeUiTest.kt`, UIAutomator-driven, and assert on the app's own logcat (tag `SpikeLog`, mirrored from `MainActivity.append`) via the `logcatContains` helper — NOT by scraping the Compose log pane. Use `tapUntilLog` / `scrollTo` / `scrollToEnabled` (they re-find elements each attempt to survive recomposition).
 - Keep pure logic in framework-free classes so it is JVM-unit-testable (the project already does this, e.g. `voice/TtsText.kt`).
-- Build/verify locally if feasible: `JAVA_HOME=$HOME/opt/jdk17 ./gradlew testDebugUnitTest` (unit tests run locally; the emulator suite runs in CI, not here).
+- Do NOT run Gradle or any build/test on this host: its RAM is constrained/faulty and the JVM will crash. Reason carefully about correctness, then push and let GitHub CI build and test. Each CI cycle is ~7 minutes, so think before pushing rather than trial-and-error.
 
 ## Hard rules
 - Do NOT modify anything under `.github/workflows/` or `autonomy/`. Do NOT weaken, skip, or delete existing tests.

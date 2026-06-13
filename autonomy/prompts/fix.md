@@ -12,6 +12,7 @@ You are working autonomously on the anki-voice Android app, on git branch `{{BRA
   - Unit tests use PLAIN JUnit assertions (no Google Truth).
   - Build memory is constrained; do not add heavy dependencies.
 - Make the minimal correct change. Do NOT disable, skip (`@Ignore`/`assumeFalse`), or delete tests to make CI pass. Do NOT modify `.github/workflows/` or `autonomy/`.
+- Do NOT run Gradle/builds on this host (RAM is constrained/faulty, the JVM crashes); push and let CI verify.
 
 ## Finish
 Commit and push to the same branch:
