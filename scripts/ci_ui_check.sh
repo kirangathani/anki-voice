@@ -24,6 +24,9 @@ ANKI_URL=$(curl -sL https://api.github.com/repos/ankidroid/Anki-Android/releases
 echo "AnkiDroid APK: ${ANKI_URL:-<none found>}"
 if [ -n "${ANKI_URL:-}" ] && curl -fsSL -o ankidroid.apk "$ANKI_URL"; then
   adb install -r -g ankidroid.apk || echo "WARN: adb install AnkiDroid failed"
+  # Pre-grant All-files-access so AnkiDroid's onboarding permission screen is
+  # already satisfied (the "Continue" button is disabled until it is).
+  adb shell appops set com.ichi2.anki MANAGE_EXTERNAL_STORAGE allow || true
   # Taps the on-screen element whose exact text is $1, by parsing its bounds
   # from a uiautomator dump (so it works regardless of screen resolution).
   tap_by_text() {
@@ -44,8 +47,15 @@ if [ -n "${ANKI_URL:-}" ] && curl -fsSL -o ankidroid.apk "$ANKI_URL"; then
   # tapped. Complete onboarding so the provider has a deck.
   adb shell monkey -p com.ichi2.anki -c android.intent.category.LAUNCHER 1 || true
   sleep 12
-  if tap_by_text "Get Started"; then echo "tapped Get Started"; else echo "no Get Started button found"; fi
-  sleep 12
+  # Onboarding: Get Started -> permissions (pre-granted) Continue -> DeckPicker.
+  # Tap a few times in case there are extra steps; harmless if a button is absent.
+  if tap_by_text "Get Started"; then echo "tapped Get Started"; else echo "no Get Started button"; fi
+  sleep 6
+  if tap_by_text "Continue"; then echo "tapped Continue"; else echo "no Continue button"; fi
+  sleep 6
+  tap_by_text "Continue" >/dev/null 2>&1 || true
+  tap_by_text "Got it" >/dev/null 2>&1 || true
+  sleep 8
   adb exec-out screencap -p > ankidroid.png 2>/dev/null || true
   adb shell uiautomator dump /sdcard/ad2.xml >/dev/null 2>&1 || true
   adb pull /sdcard/ad2.xml ankidroid_ui.xml >/dev/null 2>&1 || true
