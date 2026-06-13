@@ -1,0 +1,21 @@
+# systemd USER unit for the anki-voice autonomy supervisor.
+# Install to ~/.config/systemd/user/anki-autonomy.service on Jupiter, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now anki-autonomy.service   # (only when going fully autonomous, phase 5c)
+# Requires lingering (already enabled): loginctl enable-linger kiran
+[Unit]
+Description=anki-voice autonomy supervisor (headless Claude Code coding loop)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/autonomy
+Environment=AUTONOMY_DIR=%h/autonomy
+EnvironmentFile=-%h/autonomy/env
+ExecStart=%h/autonomy/bin/supervisor.sh
+Restart=always
+RestartSec=30
+# resilience on the faulty-RAM box: always come back and resume from state.
+
+[Install]
+WantedBy=default.target

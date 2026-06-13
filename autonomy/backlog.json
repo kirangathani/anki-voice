@@ -1,0 +1,20 @@
+{
+  "_comment": "Ordered backlog for the anki-voice autonomy supervisor. Tasks run top-to-bottom. Each has an id, title, and a spec markdown file under autonomy/tasks/. Edit/append here to give the bot more work; the supervisor picks up new pending tasks on its next idle poll.",
+  "tasks": [
+    {
+      "id": "task-15-review-session",
+      "title": "ReviewSession hands-free state machine (pure Kotlin) + unit tests",
+      "spec": "tasks/task-15-review-session.md"
+    },
+    {
+      "id": "task-16-review-ui",
+      "title": "Start hands-free review button in MainActivity wiring ReviewSession",
+      "spec": "tasks/task-16-review-ui.md"
+    },
+    {
+      "id": "task-voice-vocab",
+      "title": "Voice command vocabulary (grade / repeat / answer), keyword-match first",
+      "spec": "tasks/task-voice-vocab.md"
+    }
+  ]
+}
