@@ -287,6 +287,40 @@ class SpikeUiTest {
     }
 
     /**
+     * "Start hands-free review" launches ReviewSession for the selected deck.
+     * On the CI emulator there is no audio output or mic input, so TTS and STT
+     * will error; we only assert the session starts (SpeakingQuestion logged).
+     * Skips when AnkiDroid is absent or no card is available.
+     */
+    @Test
+    fun startHandsFreeReview_startsSession() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        // Grant mic permission so the button is enabled
+        try {
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .grantRuntimePermission(PKG, android.Manifest.permission.RECORD_AUDIO)
+        } catch (_: Exception) {}
+        // Need a deck selected first
+        assumeTrue("decks should load", tapUntilLog("List decks", "Loaded"))
+        assumeTrue(
+            "a deck must be selected",
+            !readSpikeLog().contains("Selected: <none>"),
+        )
+        // Wait for math pipeline
+        assertTrue(
+            "MathPipeline should be ready",
+            logcatContains("MathPipeline ready", READY_TIMEOUT),
+        )
+        val btn = scrollToEnabled("Start hands-free review")
+        assertNotNull("'Start hands-free review' should be enabled", btn)
+        btn!!.click()
+        assertTrue(
+            "ReviewSession should reach SpeakingQuestion state",
+            logcatContains("ReviewSession: SpeakingQuestion", 30_000),
+        )
+    }
+
+    /**
      * "Test mic" (after granting) starts STT. The emulator has no microphone
      * input, so this asserts it begins listening or errors gracefully (no crash).
      */

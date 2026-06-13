@@ -48,10 +48,15 @@ import dev.kiran.ankivoice.math.MathPipeline
 import dev.kiran.ankivoice.math.MathView
 import dev.kiran.ankivoice.voice.LlmSpeechConverter
 import dev.kiran.ankivoice.voice.SpeechCache
+import dev.kiran.ankivoice.session.CardSource
+import dev.kiran.ankivoice.session.Listener
+import dev.kiran.ankivoice.session.ReviewSession
+import dev.kiran.ankivoice.session.Speaker
 import dev.kiran.ankivoice.voice.SttEngine
 import dev.kiran.ankivoice.voice.TtsEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -140,6 +145,8 @@ private fun SpikeScreen() {
     var revealAnswer by remember { mutableStateOf(false) }
     var cardStartedAtMs by remember { mutableStateOf(0L) }
     var mathPipelineReady by remember { mutableStateOf(false) }
+    var sessionStatus by remember { mutableStateOf<String?>(null) }
+    var sessionJob by remember { mutableStateOf<Job?>(null) }
 
     fun fetchNextCard(deck: Deck) {
         scope.launch {
@@ -388,6 +395,71 @@ private fun SpikeScreen() {
             ) { Text(if (micGranted) "Test mic" else "Grant mic") }
         }
 
+        // Hands-free review session
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                enabled = permissionGranted && selectedDeck != null
+                    && mathPipelineReady && micGranted && sessionJob == null,
+                onClick = {
+                    val deck = selectedDeck ?: return@Button
+                    val speaker = TtsSpeaker(tts)
+                    val listener = SttListener(stt)
+                    val cardSource = RepoCardSource(repo)
+                    val session = ReviewSession(
+                        speaker = speaker,
+                        listener = listener,
+                        cardSource = cardSource,
+                        onLog = { line ->
+                            append(line)
+                            // Parse state from ReviewSession log lines
+                            val prefix = "ReviewSession: "
+                            if (line.startsWith(prefix)) {
+                                val state = line.removePrefix(prefix)
+                                sessionStatus = when {
+                                    state == "SpeakingQuestion" -> "Speaking question..."
+                                    state == "AwaitingAnswer" -> "Listening..."
+                                    state == "PromptingForGrade" -> "Grade?"
+                                    state == "AwaitingCommand" -> "Listening for command..."
+                                    state == "SpeakingAnswer" -> "Speaking answer..."
+                                    state == "finished" -> null
+                                    state.startsWith("no more") -> null
+                                    else -> sessionStatus
+                                }
+                            }
+                        },
+                    )
+                    sessionJob = scope.launch {
+                        try {
+                            session.run(deck.id)
+                        } catch (t: Throwable) {
+                            append("ReviewSession error: ${t.javaClass.simpleName}: ${t.message}")
+                        } finally {
+                            sessionStatus = null
+                            sessionJob = null
+                        }
+                    }
+                },
+            ) { Text("Start hands-free review") }
+
+            if (sessionJob != null) {
+                Button(onClick = {
+                    tts.stop()
+                    sessionJob?.cancel()
+                    sessionJob = null
+                    sessionStatus = null
+                    append("ReviewSession: cancelled by user")
+                }) { Text("Stop session") }
+            }
+        }
+
+        sessionStatus?.let { status ->
+            Text(
+                status,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
         Text("Log", style = MaterialTheme.typography.labelLarge)
         LogPane(log, Modifier.fillMaxWidth())
     }
@@ -419,6 +491,32 @@ private fun LogPane(lines: List<String>, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(2.dp))
         }
     }
+}
+
+/** Adapts [TtsEngine] to the [Speaker] port expected by [ReviewSession]. */
+private class TtsSpeaker(private val tts: TtsEngine) : Speaker {
+    override suspend fun speak(text: String) = tts.speak(text)
+    override fun stop() = tts.stop()
+}
+
+/** Adapts [SttEngine] to the [Listener] port expected by [ReviewSession]. */
+private class SttListener(private val stt: SttEngine) : Listener {
+    override suspend fun listen(wakeWords: List<String>): Listener.Result {
+        return when (val r = stt.listen(wakeWords = wakeWords)) {
+            is SttEngine.Result.Recognized -> Listener.Result.Recognized(r.transcript)
+            is SttEngine.Result.NoMatch -> Listener.Result.NoMatch
+            is SttEngine.Result.Error -> Listener.Result.Error(r.code, r.message)
+        }
+    }
+}
+
+/** Adapts [AnkiRepository] to the [CardSource] port expected by [ReviewSession]. */
+private class RepoCardSource(private val repo: AnkiRepository) : CardSource {
+    override suspend fun nextDueCard(deckId: Long): DueCard? = repo.nextDueCard(deckId)
+    override fun submitReview(card: DueCard, ease: Int, timeTakenMs: Long) {
+        repo.submitReview(card, ease, timeTakenMs)
+    }
+    override fun requestSync() = repo.requestSync()
 }
 
 private fun CoroutineScope.launchIo(
