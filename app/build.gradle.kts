@@ -97,6 +97,10 @@ dependencies {
     // metadata does not match AGP's unit-test variant and silently fails to
     // land on the classpath.)
     testImplementation("junit:junit:4.13.2")
+    // Real org.json on the JVM unit-test classpath. The android.jar stub throws
+    // "not mocked" off-device, so classes that build/parse JSON (e.g.
+    // LlmCommandClassifier) can only be unit-tested with the genuine library.
+    testImplementation("org.json:json:20240303")
 
     // Instrumented UI tests (Tier 3). Run on an emulator/device via
     // ./gradlew connectedDebugAndroidTest. UIAutomator drives the real app
