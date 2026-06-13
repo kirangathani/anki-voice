@@ -108,6 +108,8 @@ jobs:
             screenshot.png
             ui.xml
             spikelog.txt
+            ankidroid.png
+            ankidroid_ui.xml
             app/build/reports/androidTests/connected
             app/build/outputs/androidTest-results/connected
           if-no-files-found: warn

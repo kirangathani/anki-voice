@@ -26,7 +26,12 @@ if [ -n "${ANKI_URL:-}" ] && curl -fsSL -o ankidroid.apk "$ANKI_URL"; then
   adb install -r -g ankidroid.apk || echo "WARN: adb install AnkiDroid failed"
   # Launch once to create the default collection, then return home.
   adb shell monkey -p com.ichi2.anki -c android.intent.category.LAUNCHER 1 || true
-  sleep 25
+  sleep 20
+  # Diagnostic: capture AnkiDroid's own screen + UI tree to understand why the
+  # ContentProvider reports 0 decks (onboarding? empty DeckPicker?).
+  adb exec-out screencap -p > ankidroid.png 2>/dev/null || true
+  adb shell uiautomator dump /sdcard/ad.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/ad.xml ankidroid_ui.xml >/dev/null 2>&1 || true
   adb shell input keyevent KEYCODE_HOME || true
   echo "AnkiDroid installed + initialized"
 else
