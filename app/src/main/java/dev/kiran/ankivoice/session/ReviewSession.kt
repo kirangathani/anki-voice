@@ -1,6 +1,7 @@
 package dev.kiran.ankivoice.session
 
 import dev.kiran.ankivoice.anki.DueCard
+import dev.kiran.ankivoice.math.MathExtractor
 
 /**
  * Port: something that can speak text aloud and block until done.
@@ -32,6 +33,12 @@ interface CardSource {
     suspend fun nextDueCard(deckId: Long): DueCard?
     fun submitReview(card: DueCard, ease: Int, timeTakenMs: Long)
     fun requestSync()
+
+    /**
+     * Converts raw card text (LaTeX delimiters intact) to TTS-ready speech.
+     * Backed by [dev.kiran.ankivoice.anki.AnkiRepository.generateSpeech].
+     */
+    suspend fun generateSpeech(rawHtml: String): String
 }
 
 /**
@@ -136,15 +143,20 @@ class ReviewSession(
                     // Loop back to PromptingForGrade
                 }
                 is ReviewCommand.RepeatEquation -> {
-                    // v1: we cannot isolate just the converted math speech here
-                    // (no speech converter in-session), so when the card has
-                    // math we re-read the full question; otherwise we say so.
-                    if (EquationExtractor.hasEquation(card.displayHtmlQuestion)) {
-                        onLog("ReviewSession: repeating equation (v1 re-reads full question)")
+                    // Re-read only the math, skipping surrounding prose. Each
+                    // extracted LaTeX block is re-wrapped in delimiters and run
+                    // through the same speech path the card text used, so the
+                    // formula is spoken in ClearSpeak prose, not raw LaTeX.
+                    val segments = MathExtractor.extractMath(card.displayHtmlQuestion)
+                    if (segments.isEmpty()) {
+                        onLog("ReviewSession: no equation on card, repeating question")
                         speaker.speak(card.speechQuestion)
                     } else {
-                        onLog("ReviewSession: no equation on card")
-                        speaker.speak("This card has no equation.")
+                        onLog("ReviewSession: repeating equation (${segments.size} segment(s))")
+                        for (segment in segments) {
+                            val speech = cardSource.generateSpeech("\$\$$segment\$\$")
+                            if (speech.isNotBlank()) speaker.speak(speech)
+                        }
                     }
                     // Loop back to PromptingForGrade
                 }
