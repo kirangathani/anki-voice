@@ -49,7 +49,10 @@ import dev.kiran.ankivoice.math.MathView
 import dev.kiran.ankivoice.voice.LlmSpeechConverter
 import dev.kiran.ankivoice.voice.SpeechCache
 import dev.kiran.ankivoice.session.CardSource
+import dev.kiran.ankivoice.session.CommandCache
+import dev.kiran.ankivoice.session.CommandResolver
 import dev.kiran.ankivoice.session.Listener
+import dev.kiran.ankivoice.session.LlmCommandClassifier
 import dev.kiran.ankivoice.session.ReviewSession
 import dev.kiran.ankivoice.session.Speaker
 import dev.kiran.ankivoice.voice.SttEngine
@@ -112,6 +115,18 @@ private fun SpikeScreen() {
         }
     }
     val repo = remember { AnkiRepository(context, mathPipeline, llmSpeech, onLog = append) }
+    // Keyword-first command resolution; LLM intent fallback only when a key is set.
+    val commandResolver = remember {
+        val key = BuildConfig.ANTHROPIC_API_KEY
+        if (key.isNotEmpty()) {
+            CommandResolver(
+                classifier = LlmCommandClassifier(key, CommandCache(context), onLog = append),
+                onLog = append,
+            )
+        } else {
+            CommandResolver(onLog = append)
+        }
+    }
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -409,6 +424,7 @@ private fun SpikeScreen() {
                         speaker = speaker,
                         listener = listener,
                         cardSource = cardSource,
+                        resolver = commandResolver,
                         onLog = { line ->
                             append(line)
                             // Parse state from ReviewSession log lines

@@ -50,6 +50,7 @@ class ReviewSession(
     private val speaker: Speaker,
     private val listener: Listener,
     private val cardSource: CardSource,
+    private val resolver: CommandResolver = CommandResolver(),
     private val onLog: (String) -> Unit = {},
 ) {
 
@@ -117,7 +118,7 @@ class ReviewSession(
             onLog("ReviewSession: AwaitingCommand")
             val result = listener.listen()
 
-            when (val command = CommandParser.parse(transcriptOf(result))) {
+            when (val command = resolver.resolve(transcriptOf(result))) {
                 is ReviewCommand.Grade -> {
                     val timeMs = System.currentTimeMillis() - cardStartMs
                     cardSource.submitReview(card, command.ease, timeMs)
