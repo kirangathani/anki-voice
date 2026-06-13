@@ -9,7 +9,7 @@ class MathExtractorTest {
 
     @Test
     fun extractsDoubleDollarBlock() {
-        assertEquals(listOf("x + 1"), MathExtractor.extractMath("Compute $$x + 1$$ now."))
+        assertEquals(listOf("x + 1"), MathExtractor.extractMath("Compute \$\$x + 1\$\$ now."))
     }
 
     @Test
@@ -29,7 +29,7 @@ class MathExtractorTest {
 
     @Test
     fun multipleSegmentsReturnedInSourceOrder() {
-        val text = """First \(a\) then $$b + c$$ then \[d\]."""
+        val text = """First \(a\) then ${'$'}${'$'}b + c${'$'}${'$'} then \[d\]."""
         assertEquals(listOf("a", "b + c", "d"), MathExtractor.extractMath(text))
     }
 
@@ -51,7 +51,7 @@ class MathExtractorTest {
 
     @Test
     fun hasMathReflectsPresence() {
-        assertTrue(MathExtractor.hasMath("a $$x$$ b"))
+        assertTrue(MathExtractor.hasMath("a \$\$x\$\$ b"))
         assertFalse(MathExtractor.hasMath("no math here"))
     }
 }
