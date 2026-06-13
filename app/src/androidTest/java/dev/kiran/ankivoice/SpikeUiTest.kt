@@ -1,7 +1,9 @@
 package dev.kiran.ankivoice
 
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,6 +15,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
+import org.junit.BeforeClass
 import org.junit.runner.RunWith
 import org.junit.Test
 
@@ -306,6 +309,47 @@ class SpikeUiTest {
         private const val PKG = "dev.kiran.ankivoice"
         private const val ANKI_PERMISSION = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
         private const val LAUNCH_TIMEOUT = 15_000L
+
+        /**
+         * Seed one Basic note into AnkiDroid (once) so "Next due card" has a real
+         * card to fetch. Best-effort: guarded so a failure never breaks the suite
+         * (nextDueCard also accepts the no-cards outcome). Uses AnkiDroid's
+         * FlashCardsContract note/model URIs with the granted DB permission.
+         */
+        @BeforeClass
+        @JvmStatic
+        fun seedTestCard() {
+            val ctx = ApplicationProvider.getApplicationContext<Context>()
+            if (ctx.packageManager.getLaunchIntentForPackage("com.ichi2.anki") == null) return
+            try {
+                InstrumentationRegistry.getInstrumentation().uiAutomation
+                    .grantRuntimePermission(PKG, ANKI_PERMISSION)
+                val cr = ctx.contentResolver
+                val modelsUri = Uri.parse("content://com.ichi2.anki.flashcards/models")
+                var modelId = -1L
+                cr.query(modelsUri, null, null, null, null)?.use { c ->
+                    val idIdx = c.getColumnIndex("_id")
+                    val nameIdx = c.getColumnIndex("name")
+                    while (c.moveToNext()) {
+                        val name = if (nameIdx >= 0) c.getString(nameIdx) ?: "" else ""
+                        if (name.startsWith("Basic")) {
+                            modelId = c.getLong(idIdx)
+                            break
+                        }
+                        if (modelId == -1L) modelId = c.getLong(idIdx)
+                    }
+                }
+                if (modelId <= 0) return
+                val values = ContentValues().apply {
+                    put("mid", modelId)
+                    put("flds", "AnkiVoice test frontAnkiVoice test back")
+                    put("tags", "ankivoice-test")
+                }
+                cr.insert(Uri.parse("content://com.ichi2.anki.flashcards/notes"), values)
+            } catch (_: Exception) {
+                // best-effort; nextDueCard tolerates an empty deck
+            }
+        }
         private const val READY_TIMEOUT = 40_000L
         private const val CARD_TIMEOUT = 45_000L
     }
