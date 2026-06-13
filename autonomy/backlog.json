@@ -15,6 +15,16 @@
       "id": "task-voice-vocab",
       "title": "Voice command vocabulary (grade / repeat / answer), keyword-match first",
       "spec": "tasks/task-voice-vocab.md"
+    },
+    {
+      "id": "task-llm-intent",
+      "title": "LLM-based voice-command intent classification (Claude Haiku), keyword-first",
+      "spec": "tasks/task-llm-intent.md"
+    },
+    {
+      "id": "task-repeat-equation",
+      "title": "Repeat the equation: re-read only the math portion(s) of the card",
+      "spec": "tasks/task-repeat-equation.md"
     }
   ]
 }

@@ -10,6 +10,7 @@ You are working autonomously on the anki-voice Android app (Kotlin + Jetpack Com
   - Unit tests live in `app/src/test/...`, pure JVM, PLAIN JUnit assertions only (Google Truth does NOT resolve under AGP here — see `app/src/test/.../voice/TtsTextTest.kt`).
   - Instrumented tests live in `app/src/androidTest/.../SpikeUiTest.kt`, UIAutomator-driven, and assert on the app's own logcat (tag `SpikeLog`, mirrored from `MainActivity.append`) via the `logcatContains` helper — NOT by scraping the Compose log pane. Use `tapUntilLog` / `scrollTo` / `scrollToEnabled` (they re-find elements each attempt to survive recomposition).
 - Keep pure logic in framework-free classes so it is JVM-unit-testable (the project already does this, e.g. `voice/TtsText.kt`).
+- UI VERIFICATION (required): if your change affects the UI or user-visible behaviour, you MUST add/extend an instrumented test in `app/src/androidTest/.../SpikeUiTest.kt` that exercises it through the UI and asserts via the app's logcat (tag `SpikeLog`) using the `logcatContains`/`tapUntilLog` helpers. CI's emulator `ui-check` job boots a real device, drives the UI, and captures a screenshot + ui dump; that job is how the UI is verified. A UI change without a passing instrumented test is INCOMPLETE.
 - Do NOT run Gradle or any build/test on this host: its RAM is constrained/faulty and the JVM will crash. Reason carefully about correctness, then push and let GitHub CI build and test. Each CI cycle is ~7 minutes, so think before pushing rather than trial-and-error.
 
 ## Hard rules
