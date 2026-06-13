@@ -24,16 +24,33 @@ ANKI_URL=$(curl -sL https://api.github.com/repos/ankidroid/Anki-Android/releases
 echo "AnkiDroid APK: ${ANKI_URL:-<none found>}"
 if [ -n "${ANKI_URL:-}" ] && curl -fsSL -o ankidroid.apk "$ANKI_URL"; then
   adb install -r -g ankidroid.apk || echo "WARN: adb install AnkiDroid failed"
-  # Launch once to create the default collection, then return home.
+  # Taps the on-screen element whose exact text is $1, by parsing its bounds
+  # from a uiautomator dump (so it works regardless of screen resolution).
+  tap_by_text() {
+    adb shell uiautomator dump /sdcard/ad.xml >/dev/null 2>&1 || true
+    adb pull /sdcard/ad.xml /tmp/ad.xml >/dev/null 2>&1 || true
+    local nums
+    nums=$(tr '>' '\n' < /tmp/ad.xml 2>/dev/null \
+      | grep -F "text=\"$1\"" \
+      | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"' | head -1 \
+      | grep -oE '[0-9]+')
+    [ -z "$nums" ] && return 1
+    set -- $nums
+    adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+  }
+
+  # AnkiDroid's first-run shows a "Get Started" onboarding screen; the collection
+  # (and the Default deck the ContentProvider returns) is not created until it is
+  # tapped. Complete onboarding so the provider has a deck.
   adb shell monkey -p com.ichi2.anki -c android.intent.category.LAUNCHER 1 || true
-  sleep 20
-  # Diagnostic: capture AnkiDroid's own screen + UI tree to understand why the
-  # ContentProvider reports 0 decks (onboarding? empty DeckPicker?).
+  sleep 12
+  if tap_by_text "Get Started"; then echo "tapped Get Started"; else echo "no Get Started button found"; fi
+  sleep 12
   adb exec-out screencap -p > ankidroid.png 2>/dev/null || true
-  adb shell uiautomator dump /sdcard/ad.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/ad.xml ankidroid_ui.xml >/dev/null 2>&1 || true
+  adb shell uiautomator dump /sdcard/ad2.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/ad2.xml ankidroid_ui.xml >/dev/null 2>&1 || true
   adb shell input keyevent KEYCODE_HOME || true
-  echo "AnkiDroid installed + initialized"
+  echo "AnkiDroid installed + onboarding completed"
 else
   echo "WARN: could not fetch AnkiDroid APK; ContentProvider test will skip"
 fi
