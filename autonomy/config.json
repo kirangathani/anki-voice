@@ -1,0 +1,46 @@
+{
+  "engine": {
+    "model": "claude-opus-4-8",
+    "fallback_model": null,
+    "poll_interval_s": 30,
+    "idle_interval_s": 600,
+    "max_fix": 5,
+    "task_wallclock_cap_s": 3600,
+    "run_wallclock_cap_s": 28800,
+    "active_hours": null,
+    "claude_timeout_s": 1800
+  },
+  "quota": {
+    "probe_base_s": 300,
+    "probe_cap_s": 1800,
+    "weekly_floor_s": 3600,
+    "jitter_s": 60,
+    "tz": "Europe/London"
+  },
+  "paths": {
+    "state_dir": "~/autonomy/state",
+    "status_file": "~/autonomy/state/status.json",
+    "log_file": "~/autonomy/logs/engine.jsonl",
+    "lock_file": "~/autonomy/engine.lock"
+  },
+  "notify": {
+    "channel": "telegram",
+    "chat_id": "7853471624",
+    "openclaw_agent": "main",
+    "notify_script": "~/autonomy/bin/notify.sh"
+  },
+  "projects": {
+    "anki-voice": {
+      "repo": "github.com/kirangathani/anki-voice",
+      "repo_slug": "kirangathani/anki-voice",
+      "work_clone": "~/autonomy/work/anki-voice",
+      "base_branch": "origin/main",
+      "gh_token_env": "GH_TOKEN",
+      "deploy_key": "~/.ssh/id_ed25519",
+      "backlog": "~/autonomy/backlog.json",
+      "spec_root": "~/autonomy",
+      "prompts_dir": "~/autonomy/prompts",
+      "protected_paths": [".github/workflows", "autonomy/"]
+    }
+  }
+}

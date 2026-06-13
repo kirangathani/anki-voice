@@ -1,0 +1,16 @@
+[project]
+name = "ankiauto"
+version = "2.0.0"
+description = "Autonomous coding engine for anki-voice (OpenClaw-native, quota-aware)"
+requires-python = ">=3.11"
+dependencies = []   # stdlib only: config is JSON, runs on system python3
+
+[project.scripts]
+ankiauto = "ankiauto.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
