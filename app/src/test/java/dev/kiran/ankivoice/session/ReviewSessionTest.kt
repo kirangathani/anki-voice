@@ -35,6 +35,9 @@ class ReviewSessionTest {
             reviews += Triple(card, ease, timeTakenMs)
         }
         override fun requestSync() { syncRequested = true }
+        // Mirrors AnkiRepository.generateSpeech with an identifiable marker so
+        // tests can assert the equation re-read path went through it.
+        override suspend fun generateSpeech(rawHtml: String): String = "SPEECH($rawHtml)"
     }
 
     // -- Helpers --
@@ -102,6 +105,52 @@ class ReviewSessionTest {
         val qCount = speaker.spoken.count { it == c.speechQuestion }
         assertEquals("question spoken twice", 2, qCount)
         // Grade submitted as Easy
+        assertEquals(AnkiContract.Ease.EASY, source.reviews[0].second)
+    }
+
+    @Test
+    fun repeatEquationCommand_speaksOnlyMath() = runBlocking {
+        val c = card(q = "Compute the ratio \$\$\\frac{a}{b}\$\$ now.", a = "done")
+        val speaker = FakeSpeaker()
+        val listener = FakeListener(listOf(
+            recognized("execute"),    // AwaitingAnswer
+            recognized("equation"),   // AwaitingCommand -> repeat equation
+            recognized("good"),       // AwaitingCommand -> grade
+        ))
+        val source = FakeCardSource(listOf(c))
+
+        ReviewSession(speaker, listener, source).run(1L)
+
+        // The math segment was re-wrapped and run through generateSpeech, then spoken.
+        assertTrue(
+            "math speech spoken",
+            speaker.spoken.contains("SPEECH(\$\$\\frac{a}{b}\$\$)"),
+        )
+        // The surrounding prose was NOT spoken on the repeat-equation path.
+        assertTrue(
+            "prose question not re-spoken on equation repeat",
+            speaker.spoken.count { it == c.speechQuestion } == 1,
+        )
+        assertEquals(AnkiContract.Ease.GOOD, source.reviews[0].second)
+    }
+
+    @Test
+    fun repeatEquationCommand_noMath_fallsBackToQuestion() = runBlocking {
+        val c = card(q = "What is the capital of France?", a = "Paris")
+        val speaker = FakeSpeaker()
+        val listener = FakeListener(listOf(
+            recognized("execute"),    // AwaitingAnswer
+            recognized("equation"),   // AwaitingCommand -> repeat equation (no math)
+            recognized("easy"),       // AwaitingCommand -> grade
+        ))
+        val source = FakeCardSource(listOf(c))
+        val logs = mutableListOf<String>()
+
+        ReviewSession(speaker, listener, source) { logs += it }.run(1L)
+
+        // No math -> falls back to repeating the question (spoken twice total).
+        assertEquals("question spoken twice", 2, speaker.spoken.count { it == c.speechQuestion })
+        assertTrue("log fallback", logs.any { it.contains("no equation on card, repeating question") })
         assertEquals(AnkiContract.Ease.EASY, source.reviews[0].second)
     }
 

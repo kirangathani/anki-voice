@@ -533,6 +533,7 @@ private class RepoCardSource(private val repo: AnkiRepository) : CardSource {
         repo.submitReview(card, ease, timeTakenMs)
     }
     override fun requestSync() = repo.requestSync()
+    override suspend fun generateSpeech(rawHtml: String): String = repo.generateSpeech(rawHtml)
 }
 
 private fun CoroutineScope.launchIo(
