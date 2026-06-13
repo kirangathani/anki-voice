@@ -133,14 +133,19 @@ class SpikeUiTest {
         )
     }
 
-    /** Re-finds [buttonText] and taps it, retrying until [expectLog] appears in logcat. */
-    private fun tapUntilLog(buttonText: String, expectLog: String, attempts: Int = 5): Boolean {
+    /**
+     * Re-finds [buttonText] and taps it, retrying until any of [expect] appears
+     * in logcat. Re-finding each attempt makes it robust to recomposition that
+     * moves buttons (e.g. the card's WebView resizing).
+     */
+    private fun tapUntilLog(buttonText: String, vararg expect: String, attempts: Int = 5): Boolean {
+        val wanted = expect.toList()
         repeat(attempts) {
             scrollTo(buttonText)?.click()
-            if (logcatContains(expectLog, 4_000)) return true
+            if (logcatContains(wanted, 4_000)) return true
             device.waitForIdle()
         }
-        return logcatContains(expectLog, 2_000)
+        return logcatContains(wanted, 2_000)
     }
 
     /**
@@ -165,6 +170,44 @@ class SpikeUiTest {
         )
     }
 
+    /** "Sync now" broadcasts DO_SYNC to AnkiDroid; the app logs that it sent it. */
+    @Test
+    fun syncNow_sendsDoSyncBroadcast() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        assertTrue(
+            "'Sync now' should broadcast DO_SYNC",
+            tapUntilLog("Sync now", "DO_SYNC broadcast sent"),
+        )
+    }
+
+    /** "Dump columns" queries the ContentProvider and logs the column names. */
+    @Test
+    fun dumpColumns_logsProviderColumns() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        assertTrue(
+            "'Dump columns' should log provider columns",
+            tapUntilLog("Dump columns", "Decks columns:"),
+        )
+    }
+
+    /**
+     * "Next due card" queries the selected deck. With AnkiDroid's fresh default
+     * collection there are no due cards, so this asserts the query path runs and
+     * either fetches a card or reports none due (graceful empty handling).
+     */
+    @Test
+    fun nextDueCard_queriesSelectedDeck() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        assertTrue(
+            "'List decks' should load decks and select one",
+            tapUntilLog("List decks", "Loaded"),
+        )
+        assertTrue(
+            "'Next due card' should fetch a card or report none due",
+            tapUntilLog("Next due card", "Fetched card", "No more due cards"),
+        )
+    }
+
     private fun isAnkiDroidInstalled(): Boolean {
         val pm = ApplicationProvider.getApplicationContext<Context>().packageManager
         return pm.getLaunchIntentForPackage("com.ichi2.anki") != null
@@ -175,20 +218,26 @@ class SpikeUiTest {
      * test shares the app's UID, so it can read the app's log entries, which is
      * far more reliable than scraping the nested-scroll Compose log pane.
      */
-    private fun logcatContains(substr: String, timeoutMs: Long): Boolean {
+    private fun logcatContains(substr: String, timeoutMs: Long): Boolean =
+        logcatContains(listOf(substr), timeoutMs)
+
+    private fun logcatContains(subs: List<String>, timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            try {
-                val proc = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-s", "SpikeLog:I"))
-                val text = proc.inputStream.bufferedReader().use { it.readText() }
-                proc.waitFor()
-                if (text.contains(substr)) return true
-            } catch (_: Exception) {
-                // ignore and retry
-            }
+            val text = readSpikeLog()
+            if (subs.any { text.contains(it) }) return true
             Thread.sleep(400)
         }
-        return false
+        return subs.any { readSpikeLog().contains(it) }
+    }
+
+    private fun readSpikeLog(): String = try {
+        val proc = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-s", "SpikeLog:I"))
+        val text = proc.inputStream.bufferedReader().use { it.readText() }
+        proc.waitFor()
+        text
+    } catch (_: Exception) {
+        ""
     }
 
     /** Finds [text], scrolling the screen up to a few times if it is off-screen. */
