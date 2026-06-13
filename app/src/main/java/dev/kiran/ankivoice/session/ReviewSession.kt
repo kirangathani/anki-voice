@@ -1,6 +1,5 @@
 package dev.kiran.ankivoice.session
 
-import dev.kiran.ankivoice.anki.AnkiContract
 import dev.kiran.ankivoice.anki.DueCard
 
 /**
@@ -118,64 +117,52 @@ class ReviewSession(
             onLog("ReviewSession: AwaitingCommand")
             val result = listener.listen()
 
-            when (val command = parseCommand(result)) {
-                is Command.Grade -> {
+            when (val command = CommandParser.parse(transcriptOf(result))) {
+                is ReviewCommand.Grade -> {
                     val timeMs = System.currentTimeMillis() - cardStartMs
                     cardSource.submitReview(card, command.ease, timeMs)
                     onLog("ReviewSession: submitted ${command.label}")
                     return true // next card
                 }
-                is Command.Answer -> {
+                is ReviewCommand.Answer -> {
                     onLog("ReviewSession: SpeakingAnswer")
                     speaker.speak(card.speechAnswer)
                     // Loop back to PromptingForGrade
                 }
-                is Command.Repeat -> {
+                is ReviewCommand.RepeatQuestion -> {
                     onLog("ReviewSession: repeating question")
                     speaker.speak(card.speechQuestion)
                     // Loop back to PromptingForGrade
                 }
-                is Command.Stop -> {
+                is ReviewCommand.RepeatEquation -> {
+                    // v1: we cannot isolate just the converted math speech here
+                    // (no speech converter in-session), so when the card has
+                    // math we re-read the full question; otherwise we say so.
+                    if (EquationExtractor.hasEquation(card.displayHtmlQuestion)) {
+                        onLog("ReviewSession: repeating equation (v1 re-reads full question)")
+                        speaker.speak(card.speechQuestion)
+                    } else {
+                        onLog("ReviewSession: no equation on card")
+                        speaker.speak("This card has no equation.")
+                    }
+                    // Loop back to PromptingForGrade
+                }
+                is ReviewCommand.Stop -> {
                     onLog("ReviewSession: user stopped")
                     return false
                 }
-                is Command.Unknown -> {
+                is ReviewCommand.Unknown -> {
                     onLog("ReviewSession: unrecognized command '${command.raw}'")
-                    speaker.speak("Sorry, I didn't understand. Say again, hard, good, easy, answer, repeat, or stop.")
+                    speaker.speak("Sorry, I didn't understand. Say again, hard, good, easy, answer, repeat, equation, or stop.")
                     // Loop back to PromptingForGrade
                 }
             }
         }
     }
 
-    private sealed class Command {
-        data class Grade(val ease: Int, val label: String) : Command()
-        data object Answer : Command()
-        data object Repeat : Command()
-        data object Stop : Command()
-        data class Unknown(val raw: String) : Command()
-    }
-
-    private fun parseCommand(result: Listener.Result): Command {
-        val transcript = when (result) {
-            is Listener.Result.Recognized -> result.transcript.trim().lowercase()
-            is Listener.Result.NoMatch -> return Command.Unknown("")
-            is Listener.Result.Error -> return Command.Unknown("error:${result.code}")
-        }
-
-        return when {
-            transcript.contains("again") || transcript == "1" ->
-                Command.Grade(AnkiContract.Ease.AGAIN, "Again")
-            transcript.contains("hard") || transcript == "2" ->
-                Command.Grade(AnkiContract.Ease.HARD, "Hard")
-            transcript.contains("good") || transcript == "3" ->
-                Command.Grade(AnkiContract.Ease.GOOD, "Good")
-            transcript.contains("easy") || transcript == "4" ->
-                Command.Grade(AnkiContract.Ease.EASY, "Easy")
-            transcript.contains("answer") -> Command.Answer
-            transcript.contains("repeat") -> Command.Repeat
-            transcript.contains("stop") -> Command.Stop
-            else -> Command.Unknown(transcript)
-        }
+    private fun transcriptOf(result: Listener.Result): String = when (result) {
+        is Listener.Result.Recognized -> result.transcript
+        is Listener.Result.NoMatch -> ""
+        is Listener.Result.Error -> ""
     }
 }
