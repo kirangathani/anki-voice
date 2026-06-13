@@ -1,0 +1,23 @@
+# systemd USER unit for the v2 Python engine. Install to
+# ~/.config/systemd/user/ankiauto.service on Jupiter, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ankiauto.service   # (going fully autonomous)
+# Requires lingering (already enabled). The bash v1 anki-autonomy.service must be
+# stopped+disabled first (single-flight: distinct unit name + an flock in cli.py).
+[Unit]
+Description=anki-autonomy v2 (Python coding engine; quota-aware, Opus 4.8)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/autonomy
+# stdlib-only engine on system python3; PATH must expose claude/gh/git to subprocesses
+Environment=PYTHONPATH=%h/autonomy/src
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/autonomy/secrets.env
+ExecStart=/usr/bin/python3 -m ankiauto run
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
