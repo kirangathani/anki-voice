@@ -249,6 +249,66 @@ class SpikeUiTest {
         return device.findObject(By.text(buttonText)) == null
     }
 
+    /**
+     * Full review loop: fetch the seeded real card, reveal the answer, and grade
+     * it "Good", asserting the review is submitted. Skips if no card was seeded.
+     */
+    @Test
+    fun gradeRealCard_submitsReview() {
+        assumeTrue("AnkiDroid not installed", isAnkiDroidInstalled())
+        assumeTrue("decks should load", tapUntilLog("List decks", "Loaded"))
+        assumeTrue(
+            "a due card must be available to grade",
+            tapUntilLog("Next due card", "Fetched card"),
+        )
+        assertTrue("Show answer should reveal the grade buttons", tapUntilGone("Show answer"))
+        assertTrue("grading 'Good' should submit a review", tapUntilLog("Good", "Graded"))
+    }
+
+    /**
+     * "Read question" plays TTS. The CI emulator may lack a TTS engine, so this
+     * only asserts the app stays responsive (speaks or errors gracefully, no crash).
+     */
+    @Test
+    fun readQuestion_doesNotCrash() {
+        val testCard = scrollToEnabled("Test math card")
+        assertNotNull("'Test math card' should enable", testCard)
+        testCard!!.click()
+        assertNotNull(
+            "card should inject",
+            device.wait(Until.hasObject(By.text("Show answer")), CARD_TIMEOUT),
+        )
+        scrollTo("Read question")?.click()
+        device.waitForIdle()
+        assertNotNull(
+            "app should remain responsive after Read question",
+            device.wait(Until.hasObject(By.text("anki-voice spike")), 8_000),
+        )
+    }
+
+    /**
+     * "Test mic" (after granting) starts STT. The emulator has no microphone
+     * input, so this asserts it begins listening or errors gracefully (no crash).
+     */
+    @Test
+    fun testMic_listensOrErrorsGracefully() {
+        if (device.findObject(By.text("Test mic")) == null) {
+            scrollTo("Grant mic")?.click()
+            (
+                device.wait(
+                    Until.findObject(By.res("com.android.permissioncontroller:id/permission_allow_foreground_only_button")),
+                    6_000,
+                )
+                    ?: device.wait(Until.findObject(By.text("Allow")), 3_000)
+                )?.click()
+            device.wait(Until.hasObject(By.text("Test mic")), 8_000)
+        }
+        assertTrue(
+            "'Test mic' should start listening or report a mic result/error",
+            tapUntilLog("Test mic", "Listening", "Mic error", "Mic:", "Mic transcript"),
+        )
+    }
+
     private fun isAnkiDroidInstalled(): Boolean {
         val pm = ApplicationProvider.getApplicationContext<Context>().packageManager
         return pm.getLaunchIntentForPackage("com.ichi2.anki") != null
